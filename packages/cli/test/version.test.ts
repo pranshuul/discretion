@@ -28,3 +28,12 @@ describe("discretion --version", () => {
     expect(result.stdout).toBe(`${manifest.version}\n`);
   });
 });
+
+describe("discretion without a known flag", () => {
+  it.each([[[]], [["--bogus"]], [["bogus"]]])("prints usage to stderr and exits 2 for %j", (args) => {
+    const result = spawnSync(process.execPath, [bin, ...args], { encoding: "utf8" });
+    expect(result.status).toBe(2);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("Usage: discretion --version\n");
+  });
+});
