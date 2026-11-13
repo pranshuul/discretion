@@ -4,9 +4,10 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const bin = fileURLToPath(new URL("../bin/discretion.js", import.meta.url));
-const manifest = JSON.parse(
-  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
-) as { version: string; bin: Record<string, string> };
+const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+  version: string;
+  bin: Record<string, string>;
+};
 
 describe("discretion --version", () => {
   it("is installed as the discretion command", () => {
@@ -30,10 +31,13 @@ describe("discretion --version", () => {
 });
 
 describe("discretion without a known flag", () => {
-  it.each([[[]], [["--bogus"]], [["bogus"]]])("prints usage to stderr and exits 2 for %j", (args) => {
-    const result = spawnSync(process.execPath, [bin, ...args], { encoding: "utf8" });
-    expect(result.status).toBe(2);
-    expect(result.stdout).toBe("");
-    expect(result.stderr).toBe("Usage: discretion --version\n");
-  });
+  it.each([[[]], [["--bogus"]], [["bogus"]]])(
+    "prints usage to stderr and exits 2 for %j",
+    (args) => {
+      const result = spawnSync(process.execPath, [bin, ...args], { encoding: "utf8" });
+      expect(result.status).toBe(2);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toBe("Usage: discretion --version\n");
+    },
+  );
 });
