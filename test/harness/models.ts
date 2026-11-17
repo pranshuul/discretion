@@ -8,7 +8,7 @@ export type Lane = "jev" | "ollama" | "frontier";
 
 const Rule = z
   .object({
-    lane: z.enum(["ollama", "frontier"]),
+    lane: z.enum(["jev", "ollama", "frontier"]),
     contains: z.union([z.string(), z.array(z.string())]).optional(),
     reply: z.unknown(),
     status: z.number().int().min(100).max(599).optional(),
@@ -31,7 +31,7 @@ export interface ScenarioRule {
   lane: Lane;
   /** Every string must appear in the request body text. */
   contains?: string | string[];
-  /** A string, or a JSON value. */
+  /** A string, or a JSON value. For `jev`, the `answers` object keyed by question name. */
   reply: unknown;
   /** HTTP status; default 200. */
   status?: number;
@@ -80,6 +80,9 @@ export function loadScenario(path: string): Scenario {
 }
 
 function laneOf(method: string, path: string): Lane | undefined {
+  if (method === "POST" && /(^|\/)decisions$/.test(path)) {
+    return "jev";
+  }
   if (method === "POST" && (path === "/api/chat" || path === "/api/generate")) {
     return "ollama";
   }
@@ -91,6 +94,33 @@ function laneOf(method: string, path: string): Lane | undefined {
 
 function asText(reply: unknown): string {
   return typeof reply === "string" ? reply : JSON.stringify(reply);
+}
+
+/** Jev's request rules (decisions.md, 2026-11-18): a bearer key, a model, a state, 1+ questions. */
+function refuseDecision(
+  request: IncomingMessage,
+  body: unknown,
+): { status: number; message: string } | undefined {
+  if (!/^Bearer\s+\S/.test(request.headers.authorization ?? "")) {
+    return { status: 401, message: "missing bearer key" };
+  }
+  const asked = (typeof body === "object" && body !== null ? body : {}) as Record<string, unknown>;
+  if (typeof asked.model !== "string" || asked.model === "") {
+    return { status: 400, message: "model is required" };
+  }
+  if (asked.state === undefined || asked.state === null) {
+    return { status: 400, message: "state is required" };
+  }
+  const questions = asked.questions;
+  if (
+    typeof questions !== "object" ||
+    questions === null ||
+    Array.isArray(questions) ||
+    Object.keys(questions).length === 0
+  ) {
+    return { status: 400, message: "questions needs at least one key" };
+  }
+  return undefined;
 }
 
 async function readBody(request: IncomingMessage): Promise<string> {
@@ -106,7 +136,7 @@ function send(response: ServerResponse, status: number, type: string, body: stri
   response.end(body);
 }
 
-/** Answers Ollama and frontier calls from a scenario. */
+/** Answers Jev, Ollama and frontier calls from a scenario. */
 export class FakeModelServer {
   readonly calls: ModelCall[] = [];
   readonly url: string;
@@ -188,6 +218,19 @@ export class FakeModelServer {
     } catch {
       // A body that is not JSON is recorded as the text it was.
     }
+    if (lane === "jev") {
+      const refusal = refuseDecision(request, body);
+      if (refusal !== undefined) {
+        this.calls.push({ lane, method, path, body, rule: null, status: refusal.status });
+        send(
+          response,
+          refusal.status,
+          "application/json",
+          JSON.stringify({ error: refusal.message }),
+        );
+        return;
+      }
+    }
     const rule = this.match(lane, text);
     if (rule === null) {
       this.calls.push({ lane, method, path, body, rule, status: 500 });
@@ -213,6 +256,18 @@ export class FakeModelServer {
     const model = typeof asked.model === "string" ? asked.model : "";
     const answer = asText(spec.reply);
     const tokens = spec.tokens ?? { input: 0, output: 0 };
+    if (lane === "jev") {
+      const payload =
+        status >= 400
+          ? { error: answer }
+          : {
+              model,
+              answers: spec.reply,
+              usage: { input_tokens: tokens.input, output_tokens: tokens.output },
+            };
+      send(response, status, "application/json", JSON.stringify(payload));
+      return;
+    }
     if (lane === "frontier") {
       const payload =
         status >= 400
