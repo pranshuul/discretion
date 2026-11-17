@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { formatFindings, runDoctor } from "./doctor.js";
 import {
   DiscretionError,
   resolveWorkflow,
@@ -11,6 +12,7 @@ import {
 } from "@discretion/core";
 
 const usage = "Usage: discretion --version\n";
+const doctorUsage = "Usage: discretion doctor [--json]\n";
 const runUsage = "Usage: discretion run <workflow> [--input <file>]\n";
 
 interface Output {
@@ -75,10 +77,31 @@ async function runCommand(argv: string[], stdout: Output, stderr: Output): Promi
   }
 }
 
+/** `discretion doctor [--json]`: 1 when any check is an error, 0 for ok and warnings. */
+async function doctorCommand(argv: string[], stdout: Output, stderr: Output): Promise<number> {
+  let json: boolean;
+  try {
+    const parsed = parseArgs({ args: argv, options: { json: { type: "boolean" } } });
+    json = parsed.values.json === true;
+  } catch {
+    stderr.write(doctorUsage);
+    return 2;
+  }
+  const findings = await runDoctor({
+    configPath: join(homedir(), ".config", "discretion", "discretion.toml"),
+    env: process.env,
+  });
+  stdout.write(json ? `${stableStringify({ findings })}\n` : formatFindings(findings));
+  return findings.some((finding) => finding.status === "error") ? 1 : 0;
+}
+
 /** Runs the `discretion` command and returns its exit code. */
 export async function run(argv: string[], stdout: Output, stderr: Output): Promise<number> {
   if (argv[0] === "run") {
     return runCommand(argv.slice(1), stdout, stderr);
+  }
+  if (argv[0] === "doctor") {
+    return doctorCommand(argv.slice(1), stdout, stderr);
   }
   let showVersion: boolean;
   try {

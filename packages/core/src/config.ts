@@ -90,8 +90,8 @@ async function decrypt(file: string, env: NodeJS.ProcessEnv | undefined): Promis
   return parsed;
 }
 
-/** Reads `discretion.toml`, refuses unknown keys, resolves `secret:NAME` through `sops -d`. */
-export async function loadConfig(path: string, options: LoadOptions = {}): Promise<LoadedConfig> {
+/** Reads `discretion.toml` and refuses unknown keys, leaving `secret:NAME` values unresolved. */
+export async function readConfig(path: string): Promise<Config> {
   let text: string;
   try {
     text = await readFile(path, "utf8");
@@ -127,10 +127,16 @@ export async function loadConfig(path: string, options: LoadOptions = {}): Promi
     );
   }
 
+  return checked.data;
+}
+
+/** Reads `discretion.toml`, refuses unknown keys, resolves `secret:NAME` through `sops -d`. */
+export async function loadConfig(path: string, options: LoadOptions = {}): Promise<LoadedConfig> {
+  const parsed = await readConfig(path);
   const names = new Set<string>();
-  references(checked.data, names);
+  references(parsed, names);
   if (names.size === 0) {
-    return { config: checked.data, secrets: [] };
+    return { config: parsed, secrets: [] };
   }
 
   const file = join(dirname(path), "secrets.sops.yaml");
@@ -153,7 +159,7 @@ export async function loadConfig(path: string, options: LoadOptions = {}): Promi
     );
   }
   return {
-    config: substitute(checked.data, resolved) as Config,
+    config: substitute(parsed, resolved) as Config,
     secrets: [...new Set(resolved.values())].filter((value) => value !== ""),
   };
 }

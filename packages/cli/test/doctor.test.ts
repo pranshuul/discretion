@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -20,6 +20,28 @@ afterEach(async () => {
     servers.splice(0).map((server) => new Promise((done) => server.close(() => done(undefined)))),
   );
 });
+
+interface Spawned {
+  status: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+/** Async, so the in-process fake Ollama can answer while the command runs. */
+function spawnSync(
+  command: string,
+  args: string[],
+  options: { cwd: string; encoding: "utf8"; env: NodeJS.ProcessEnv },
+): Promise<Spawned> {
+  return new Promise((done) => {
+    const child = spawn(command, args, { cwd: options.cwd, env: options.env });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
+    child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
+    child.on("close", (status) => done({ status, stdout, stderr }));
+  });
+}
 
 function scratch(): string {
   const dir = mkdtempSync(join(tmpdir(), "discretion-doctor-"));
@@ -291,7 +313,7 @@ describe("discretion doctor", () => {
 
   it("exits 0 with only a warning and prints --json findings", async () => {
     const { dir, env } = await home({});
-    const result = spawnSync(process.execPath, [bin, "doctor", "--json"], {
+    const result = await spawnSync(process.execPath, [bin, "doctor", "--json"], {
       cwd: dir,
       encoding: "utf8",
       env,
@@ -310,7 +332,7 @@ describe("discretion doctor", () => {
 
   it("prints text and exits 1 when any check is an error", async () => {
     const { dir, env } = await home({ tailscale: "missing" }, "http://127.0.0.1:1");
-    const result = spawnSync(process.execPath, [bin, "doctor"], {
+    const result = await spawnSync(process.execPath, [bin, "doctor"], {
       cwd: dir,
       encoding: "utf8",
       env,
@@ -322,7 +344,7 @@ describe("discretion doctor", () => {
 
   it("refuses unknown arguments with usage and exit 2", async () => {
     const { dir, env } = await home({});
-    const result = spawnSync(process.execPath, [bin, "doctor", "--bogus"], {
+    const result = await spawnSync(process.execPath, [bin, "doctor", "--bogus"], {
       cwd: dir,
       encoding: "utf8",
       env,
