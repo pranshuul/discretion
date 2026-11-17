@@ -1,4 +1,30 @@
+import { readFileSync } from "node:fs";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import type { AddressInfo } from "node:net";
+import { z } from "zod";
+
 export type Lane = "jev" | "ollama" | "frontier";
+
+const Rule = z
+  .object({
+    lane: z.enum(["jev", "ollama", "frontier"]),
+    contains: z.union([z.string(), z.array(z.string())]).optional(),
+    reply: z.unknown(),
+    status: z.number().int().min(100).max(599).optional(),
+    times: z.number().int().min(1).optional(),
+    tokens: z
+      .object({ input: z.number().int().min(0), output: z.number().int().min(0) })
+      .strict()
+      .optional(),
+  })
+  .strict()
+  .superRefine((rule, context) => {
+    if (!("reply" in rule)) {
+      context.addIssue({ code: "custom", path: ["reply"], message: "Required" });
+    }
+  });
+
+const ScenarioSchema = z.object({ rules: z.array(Rule) }).strict();
 
 export interface ScenarioRule {
   lane: Lane;
@@ -27,37 +53,220 @@ export interface ModelCall {
   status: number;
 }
 
+function check(raw: unknown, source: string): Scenario {
+  const result = ScenarioSchema.safeParse(raw);
+  if (!result.success) {
+    throw new Error(
+      `Invalid scenario ${source}: ${result.error.issues
+        .map((issue) => `${issue.path.join(".") || "(file)"}: ${issue.message}`)
+        .join("; ")}`,
+    );
+  }
+  return result.data as Scenario;
+}
+
+/** Reads and checks a JSON scenario file. */
 export function loadScenario(path: string): Scenario {
-  void path;
-  throw new Error("red");
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(path, "utf8"));
+  } catch (error) {
+    throw new Error(`The scenario file ${path} is not readable JSON: ${(error as Error).message}`, {
+      cause: error,
+    });
+  }
+  return check(raw, path);
+}
+
+function laneOf(method: string, path: string): Lane | undefined {
+  if (method === "POST" && (path === "/api/chat" || path === "/api/generate")) {
+    return "ollama";
+  }
+  if (method === "POST" && path === "/v1/messages") {
+    return "frontier";
+  }
+  if (path === "/jev" || path.startsWith("/jev/")) {
+    return "jev";
+  }
+  return undefined;
+}
+
+function asText(reply: unknown): string {
+  return typeof reply === "string" ? reply : JSON.stringify(reply);
+}
+
+async function readBody(request: IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of request) {
+    chunks.push(chunk as Buffer);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+function send(response: ServerResponse, status: number, type: string, body: string): void {
+  response.writeHead(status, { "content-type": type });
+  response.end(body);
 }
 
 /** Answers Jev, Ollama and frontier calls from a scenario. */
 export class FakeModelServer {
   readonly calls: ModelCall[] = [];
-  readonly url: string = "";
+  readonly url: string;
+  private readonly used: number[];
 
-  static start(scenario: Scenario | string): Promise<FakeModelServer> {
-    void scenario;
-    throw new Error("red");
+  private constructor(
+    private readonly server: Server,
+    private readonly scenario: Scenario,
+  ) {
+    this.url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    this.used = scenario.rules.map(() => 0);
+  }
+
+  static async start(scenario: Scenario | string): Promise<FakeModelServer> {
+    const loaded =
+      typeof scenario === "string" ? loadScenario(scenario) : check(scenario, "(inline)");
+    const server = createServer();
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const fake = new FakeModelServer(server, loaded);
+    server.on("request", (request, response) => {
+      void fake.handle(request, response);
+    });
+    return fake;
   }
 
   /** The Jev endpoint to configure. */
   get jevEndpoint(): string {
-    throw new Error("red");
+    return `${this.url}/jev`;
   }
 
   /** Calls no rule matched. */
   get unmatched(): ModelCall[] {
-    throw new Error("red");
+    return this.calls.filter((call) => call.rule === null);
   }
 
   /** Rules with a `times` count that were not used up. */
   unused(): number[] {
-    throw new Error("red");
+    return this.scenario.rules.flatMap((rule, i) =>
+      rule.times !== undefined && (this.used[i] as number) < rule.times ? [i] : [],
+    );
   }
 
   close(): Promise<void> {
-    throw new Error("red");
+    return new Promise((resolve) => {
+      this.server.close(() => resolve());
+      this.server.closeAllConnections();
+    });
+  }
+
+  private match(lane: Lane, text: string): number | null {
+    const index = this.scenario.rules.findIndex((rule, i) => {
+      if (rule.lane !== lane) {
+        return false;
+      }
+      if (rule.times !== undefined && (this.used[i] as number) >= rule.times) {
+        return false;
+      }
+      const needles = rule.contains === undefined ? [] : [rule.contains].flat();
+      return needles.every((needle) => text.includes(needle));
+    });
+    return index === -1 ? null : index;
+  }
+
+  private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    const method = request.method ?? "GET";
+    const path = new URL(request.url ?? "/", "http://fake").pathname;
+    if (method === "GET" && path === "/api/tags") {
+      send(response, 200, "application/json", JSON.stringify({ models: [] }));
+      return;
+    }
+    const lane = laneOf(method, path);
+    if (lane === undefined) {
+      send(response, 404, "text/plain", `no such path ${path}`);
+      return;
+    }
+    const text = await readBody(request);
+    let body: unknown = text;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      // A body that is not JSON is recorded as the text it was.
+    }
+    const rule = this.match(lane, text);
+    if (rule === null) {
+      this.calls.push({ lane, method, path, body, rule, status: 500 });
+      send(response, 500, "text/plain", `no scenario rule matches this ${lane} call: ${text}`);
+      return;
+    }
+    this.used[rule] = (this.used[rule] as number) + 1;
+    const spec = this.scenario.rules[rule] as ScenarioRule;
+    const status = spec.status ?? 200;
+    this.calls.push({ lane, method, path, body, rule, status });
+    this.answer(response, lane, path, body, spec, status);
+  }
+
+  private answer(
+    response: ServerResponse,
+    lane: Lane,
+    path: string,
+    body: unknown,
+    spec: ScenarioRule,
+    status: number,
+  ): void {
+    const asked = (body ?? {}) as { model?: string; stream?: boolean };
+    const model = typeof asked.model === "string" ? asked.model : "";
+    const answer = asText(spec.reply);
+    const tokens = spec.tokens ?? { input: 0, output: 0 };
+    if (lane === "jev") {
+      if (typeof spec.reply === "string") {
+        send(response, status, "text/plain", spec.reply);
+      } else {
+        send(response, status, "application/json", JSON.stringify(spec.reply));
+      }
+      return;
+    }
+    if (lane === "frontier") {
+      const payload =
+        status >= 400
+          ? { type: "error", error: { type: "api_error", message: answer } }
+          : {
+              id: "msg_fake",
+              type: "message",
+              role: "assistant",
+              model,
+              content: [{ type: "text", text: answer }],
+              stop_reason: "end_turn",
+              stop_sequence: null,
+              usage: { input_tokens: tokens.input, output_tokens: tokens.output },
+            };
+      send(response, status, "application/json", JSON.stringify(payload));
+      return;
+    }
+    if (status >= 400) {
+      send(response, status, "application/json", JSON.stringify({ error: answer }));
+      return;
+    }
+    const createdAt = new Date().toISOString();
+    const done = {
+      model,
+      created_at: createdAt,
+      done: true,
+      done_reason: "stop",
+      prompt_eval_count: tokens.input,
+      eval_count: tokens.output,
+    };
+    const generate = path === "/api/generate";
+    const piece = (content: string, finished: boolean) => ({
+      model,
+      created_at: createdAt,
+      ...(generate ? { response: content } : { message: { role: "assistant", content } }),
+      done: finished,
+      ...(finished ? done : {}),
+    });
+    if (asked.stream === false) {
+      send(response, status, "application/json", JSON.stringify(piece(answer, true)));
+      return;
+    }
+    const lines = [piece(answer, false), piece("", true)].map((line) => JSON.stringify(line));
+    send(response, status, "application/x-ndjson", `${lines.join("\n")}\n`);
   }
 }

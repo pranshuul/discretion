@@ -128,7 +128,7 @@ describe("buildFixtureVault from a zip", () => {
       "# Monday\n",
     );
     expect(readFileSync(join(dir, "1-Roots", ".obsidian", "app.json"), "utf8")).toBe("{}\n");
-    expect(readdirSync(join(dir, "1-Roots")).sort()).toEqual(["01 Daily"]);
+    expect(readdirSync(join(dir, "1-Roots")).sort()).toEqual([".obsidian", "01 Daily"]);
     expect(existsSync(join(dir, "1-Roots", "Time-Garden-Vault"))).toBe(false);
     expect(existsSync(join(dir, "__MACOSX"))).toBe(false);
   });
