@@ -4,15 +4,15 @@ import { describe, expect, it } from "vitest";
 import { startHarness } from "./harness.js";
 import { scratch } from "./support.js";
 
-// A two-node workflow: `classify` asks Jev and writes the label; `reply` tells the owner.
+// A two-node workflow: `classify` asks the local model and writes the label; `reply` tells the owner.
 const classify = `
 const input = JSON.parse(await (await import("node:fs/promises")).readFile(process.env.DISCRETION_INPUT, "utf8"));
-const response = await fetch(input.jev + "/classify", {
+const response = await fetch(input.ollama + "/api/generate", {
   method: "POST",
   headers: { "content-type": "application/json" },
-  body: JSON.stringify({ text: input.text }),
+  body: JSON.stringify({ model: "m", prompt: input.text, stream: false }),
 });
-const answer = await response.json();
+const answer = JSON.parse((await response.json()).response);
 await (await import("node:fs/promises")).writeFile(process.env.DISCRETION_RUN_DIR + "/label", answer.label);
 console.log(JSON.stringify(answer));
 `;
@@ -66,7 +66,7 @@ outcome = "filed"
 describe("startHarness", () => {
   it("drives a two-node workflow through the runner with fake model, Telegram and clock", async () => {
     const harness = await startHarness({
-      scenario: { rules: [{ lane: "jev", contains: "a great idea", reply: { label: "idea" } }] },
+      scenario: { rules: [{ lane: "ollama", contains: "a great idea", reply: { label: "idea" } }] },
       now: "2026-11-02T03:30:00Z",
     });
     try {
@@ -76,7 +76,7 @@ describe("startHarness", () => {
         input,
         JSON.stringify({
           text: "a great idea about gardens",
-          jev: harness.models.jevEndpoint,
+          ollama: harness.models.url,
           telegram: harness.telegram.apiRoot,
           token: harness.telegram.token,
           chat: harness.telegram.ownerChatId,
@@ -85,7 +85,7 @@ describe("startHarness", () => {
       const result = await harness.run({ workflow: join(dir, "workflows", "fixture.toml"), input });
       expect(result.status).toBe("ended");
       expect(result.outcome).toBe("filed");
-      expect(harness.models.calls.map((call) => call.lane)).toEqual(["jev"]);
+      expect(harness.models.calls.map((call) => call.lane)).toEqual(["ollama"]);
       expect(harness.telegram.sent.map((message) => message.text)).toEqual(["Filed as idea"]);
       const events = readFileSync(join(harness.stateDir, "events.jsonl"), "utf8")
         .trim()

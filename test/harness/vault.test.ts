@@ -16,27 +16,8 @@ function garden(): string {
 }
 
 describe("vaultFolders", () => {
-  it("lists the four folders and the Architecture's subfolders", () => {
-    for (const folder of [
-      "1-Roots",
-      "2-Orchard",
-      "3-Mycelium",
-      "3-Mycelium/canon",
-      "3-Mycelium/inbox",
-      "3-Mycelium/goals",
-      "3-Mycelium/tasks",
-      "3-Mycelium/plans",
-      "3-Mycelium/review/items",
-      "3-Mycelium/reels",
-      "3-Mycelium/days",
-      "3-Mycelium/ribbons",
-      "3-Mycelium/config",
-      "4-Nursery",
-      "4-Nursery/cards",
-      "4-Nursery/concepts",
-    ]) {
-      expect(vaultFolders).toContain(folder);
-    }
+  it("lists only 1-Roots, which the item names", () => {
+    expect(vaultFolders).toEqual(["1-Roots"]);
   });
 });
 
@@ -44,6 +25,7 @@ describe("buildFixtureVault from a directory", () => {
   it("lays every folder and puts Time Garden under 1-Roots", () => {
     const dir = join(scratch(), "vault");
     expect(buildFixtureVault({ dir, timeGarden: garden() })).toBe(dir);
+    expect(readdirSync(dir)).toEqual(["1-Roots"]);
     for (const folder of vaultFolders) {
       expect(statSync(join(dir, folder)).isDirectory()).toBe(true);
     }
@@ -143,15 +125,16 @@ describe("buildFixtureVault from a zip", () => {
 });
 
 describe("locateTimeGarden", () => {
-  it("prefers TIME_GARDEN_DIR, returning the zip inside it", () => {
-    const dir = scratch();
-    writeFileSync(join(dir, "Time-Garden-Vault.zip"), makeZip({ "a/": "" }));
-    expect(locateTimeGarden({ TIME_GARDEN_DIR: dir })).toBe(join(dir, "Time-Garden-Vault.zip"));
+  it("ignores TIME_GARDEN_DIR, which no document names", () => {
+    const dir = garden();
+    expect(locateTimeGarden({ TIME_GARDEN_DIR: dir, HOME: scratch() })).not.toBe(dir);
   });
 
   it("returns the directory itself when it holds no zip", () => {
-    const dir = garden();
-    expect(locateTimeGarden({ TIME_GARDEN_DIR: dir })).toBe(dir);
+    const home = scratch();
+    const dir = join(home, "inbox", "time-garden");
+    mkdirSync(join(dir, "01 Daily"), { recursive: true });
+    expect(locateTimeGarden({ HOME: home })).toBe(dir);
   });
 
   it("falls back to ~/inbox/time-garden", () => {
@@ -167,7 +150,7 @@ describe("with Pranshul's real Time Garden", () => {
   beforeAll(() => {
     if (found === undefined) {
       console.log(
-        "skipped: Time Garden not found (set TIME_GARDEN_DIR or use ~/inbox/time-garden)",
+        "skipped: Time Garden not found (use ~/inbox/time-garden or /inputs/time-garden)",
       );
     }
   });

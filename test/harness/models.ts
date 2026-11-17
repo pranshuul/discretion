@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+import type { Clock } from "@discretion/core";
 import { z } from "zod";
 
 export type Lane = "jev" | "ollama" | "frontier";
@@ -122,7 +123,13 @@ export class FakeModelServer {
     this.used = scenario.rules.map(() => 0);
   }
 
-  static async start(scenario: Scenario | string): Promise<FakeModelServer> {
+  static async start(
+    scenario: Scenario | string,
+    options: { clock?: Clock } = {},
+  ): Promise<FakeModelServer> {
+    if (options.clock !== undefined) {
+      throw new Error("red");
+    }
     const loaded =
       typeof scenario === "string" ? loadScenario(scenario) : check(scenario, "(inline)");
     const server = createServer();
