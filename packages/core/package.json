@@ -9,5 +9,12 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
+  },
+  "dependencies": {
+    "@discretion/model": "workspace:*",
+    "@iarna/toml": "2.2.5"
+  },
+  "devDependencies": {
+    "@types/iarna__toml": "^2.0.5"
   }
 }
