@@ -9,5 +9,13 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
+  },
+  "scripts": {
+    "schemas": "tsc -b && node dist/cli.js",
+    "schemas:check": "tsc -b && node dist/cli.js --check"
+  },
+  "dependencies": {
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.25.2"
   }
 }
