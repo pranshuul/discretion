@@ -12,26 +12,8 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
-/** The four vault folders and the subfolders the build plan's Architecture lays out. */
-export const vaultFolders: readonly string[] = [
-  "1-Roots",
-  "2-Orchard",
-  "3-Mycelium",
-  "3-Mycelium/canon",
-  "3-Mycelium/inbox",
-  "3-Mycelium/goals",
-  "3-Mycelium/tasks",
-  "3-Mycelium/plans",
-  "3-Mycelium/review",
-  "3-Mycelium/review/items",
-  "3-Mycelium/reels",
-  "3-Mycelium/days",
-  "3-Mycelium/ribbons",
-  "3-Mycelium/config",
-  "4-Nursery",
-  "4-Nursery/cards",
-  "4-Nursery/concepts",
-];
+/** The folders the builder lays: Time Garden goes under `1-Roots/`. */
+export const vaultFolders: readonly string[] = ["1-Roots"];
 
 export interface FixtureVaultOptions {
   /** The vault directory to create. */
@@ -62,7 +44,7 @@ function unzipInto(zip: string, dir: string): void {
   }
 }
 
-/** Lays the four folders with Time Garden under `1-Roots/`; returns the vault directory. */
+/** Lays Time Garden under `1-Roots/`; returns the vault directory. */
 export function buildFixtureVault(options: FixtureVaultOptions): string {
   const { dir, timeGarden, files = {} } = options;
   if (!existsSync(timeGarden)) {
@@ -107,10 +89,9 @@ export function buildFixtureVault(options: FixtureVaultOptions): string {
   return dir;
 }
 
-/** Finds Pranshul's Time Garden copy, if this machine has one. */
+/** Finds Pranshul's Time Garden copy in `~/inbox/time-garden` or `/inputs/time-garden`, if present. */
 export function locateTimeGarden(env: NodeJS.ProcessEnv = process.env): string | undefined {
   const candidates = [
-    env.TIME_GARDEN_DIR,
     env.HOME === undefined ? undefined : join(env.HOME, "inbox", "time-garden"),
     "/inputs/time-garden",
   ];

@@ -31,7 +31,7 @@ export async function startHarness(options: {
   const telegram = await FakeTelegram.start({ clock });
   let models: FakeModelServer;
   try {
-    models = await FakeModelServer.start(options.scenario);
+    models = await FakeModelServer.start(options.scenario, { clock });
   } catch (error) {
     await telegram.close();
     rmSync(dir, { recursive: true, force: true });

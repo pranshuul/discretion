@@ -75,7 +75,7 @@ describe("buildFixtureVault from a directory", () => {
   it("accepts an existing empty directory", () => {
     const dir = scratch();
     expect(() => buildFixtureVault({ dir, timeGarden: garden() })).not.toThrow();
-    expect(readdirSync(dir).sort()).toEqual(["1-Roots", "2-Orchard", "3-Mycelium", "4-Nursery"]);
+    expect(readdirSync(dir)).toEqual(["1-Roots"]);
   });
 
   it("refuses a missing Time Garden source", () => {

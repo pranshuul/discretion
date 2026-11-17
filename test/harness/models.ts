@@ -1,14 +1,14 @@
 import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import type { Clock } from "@discretion/core";
+import { systemClock, type Clock } from "@discretion/core";
 import { z } from "zod";
 
-export type Lane = "jev" | "ollama" | "frontier";
+export type Lane = "ollama" | "frontier";
 
 const Rule = z
   .object({
-    lane: z.enum(["jev", "ollama", "frontier"]),
+    lane: z.enum(["ollama", "frontier"]),
     contains: z.union([z.string(), z.array(z.string())]).optional(),
     reply: z.unknown(),
     status: z.number().int().min(100).max(599).optional(),
@@ -86,9 +86,6 @@ function laneOf(method: string, path: string): Lane | undefined {
   if (method === "POST" && path === "/v1/messages") {
     return "frontier";
   }
-  if (path === "/jev" || path.startsWith("/jev/")) {
-    return "jev";
-  }
   return undefined;
 }
 
@@ -109,7 +106,7 @@ function send(response: ServerResponse, status: number, type: string, body: stri
   response.end(body);
 }
 
-/** Answers Jev, Ollama and frontier calls from a scenario. */
+/** Answers Ollama and frontier calls from a scenario. */
 export class FakeModelServer {
   readonly calls: ModelCall[] = [];
   readonly url: string;
@@ -118,6 +115,7 @@ export class FakeModelServer {
   private constructor(
     private readonly server: Server,
     private readonly scenario: Scenario,
+    private readonly clock: Clock,
   ) {
     this.url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     this.used = scenario.rules.map(() => 0);
@@ -127,23 +125,15 @@ export class FakeModelServer {
     scenario: Scenario | string,
     options: { clock?: Clock } = {},
   ): Promise<FakeModelServer> {
-    if (options.clock !== undefined) {
-      throw new Error("red");
-    }
     const loaded =
       typeof scenario === "string" ? loadScenario(scenario) : check(scenario, "(inline)");
     const server = createServer();
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-    const fake = new FakeModelServer(server, loaded);
+    const fake = new FakeModelServer(server, loaded, options.clock ?? systemClock);
     server.on("request", (request, response) => {
       void fake.handle(request, response);
     });
     return fake;
-  }
-
-  /** The Jev endpoint to configure. */
-  get jevEndpoint(): string {
-    return `${this.url}/jev`;
   }
 
   /** Calls no rule matched. */
@@ -223,14 +213,6 @@ export class FakeModelServer {
     const model = typeof asked.model === "string" ? asked.model : "";
     const answer = asText(spec.reply);
     const tokens = spec.tokens ?? { input: 0, output: 0 };
-    if (lane === "jev") {
-      if (typeof spec.reply === "string") {
-        send(response, status, "text/plain", spec.reply);
-      } else {
-        send(response, status, "application/json", JSON.stringify(spec.reply));
-      }
-      return;
-    }
     if (lane === "frontier") {
       const payload =
         status >= 400
@@ -252,7 +234,7 @@ export class FakeModelServer {
       send(response, status, "application/json", JSON.stringify({ error: answer }));
       return;
     }
-    const createdAt = new Date().toISOString();
+    const createdAt = this.clock.now().toISOString();
     const done = {
       model,
       created_at: createdAt,
