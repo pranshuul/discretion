@@ -6,3 +6,11 @@ export { EventLog, type NewEvent } from "./eventlog.js";
 export { idPrefixes, newId, type IdPrefix, type RandomBytes } from "./ids.js";
 export { stableStringify } from "./json.js";
 export { Logger, type Level, type LogContext, type LoggerOptions } from "./logger.js";
+export {
+  defaultTimeoutSeconds,
+  loadRunflow,
+  resolveWorkflow,
+  runWorkflow,
+  type RunOptions,
+  type RunResult,
+} from "./runner.js";

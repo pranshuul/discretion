@@ -6,5 +6,8 @@
   "type": "module",
   "bin": {
     "discretion": "./bin/discretion.js"
+  },
+  "dependencies": {
+    "@discretion/core": "workspace:*"
   }
 }
