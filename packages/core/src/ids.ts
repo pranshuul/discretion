@@ -1,5 +1,5 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-import type { Clock } from "./clock.js";
+import { randomBytes } from "node:crypto";
+import { today, type Clock } from "./clock.js";
 
 export const idPrefixes = [
   "cap",
@@ -20,7 +20,18 @@ export type IdPrefix = (typeof idPrefixes)[number];
 /** Fills a buffer with random bytes. */
 export type RandomBytes = (length: number) => Uint8Array;
 
+/** Lowercase base32 without `i`, `l`, `o` and `u`: 32 characters. */
+const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
+
 /** A generated id: `<prefix>_<YYYYMMDD>_<6 lowercase base32>`. */
-export function newId(_prefix: IdPrefix, _clock: Clock, _random?: RandomBytes): string {
-  throw new Error("red");
+export function newId(
+  prefix: IdPrefix,
+  clock: Clock,
+  random: RandomBytes = (length) => randomBytes(length),
+): string {
+  if (!idPrefixes.includes(prefix)) {
+    throw new TypeError(`Unknown id prefix ${prefix}`);
+  }
+  const suffix = Array.from(random(6), (byte) => alphabet[byte % 32]).join("");
+  return `${prefix}_${today(clock).replaceAll("-", "")}_${suffix}`;
 }
