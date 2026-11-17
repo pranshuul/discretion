@@ -244,6 +244,108 @@ describe("FakeModelServer: matching", () => {
   });
 });
 
+// Jev's wire format: decisions.md, 2026-11-18, issue #15 (TypeSafe decision format).
+const decision = (state: string | object, extra: object = {}) => ({
+  model: "jev-1.14",
+  state,
+  questions: {
+    kind: {
+      type: "choice",
+      instructions: "What is this?",
+      criteria: { idea: "an idea", task: "a task" },
+    },
+    urgent: { type: "noul", instructions: "Is it urgent?" },
+  },
+  ...extra,
+});
+
+const bearer = { authorization: "Bearer key", "content-type": "application/json" };
+
+async function ask(url: string, body: unknown, headers: Record<string, string> = bearer) {
+  const response = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
+  return { status: response.status, text: await response.text() };
+}
+
+describe("FakeModelServer: Jev", () => {
+  const answers = {
+    kind: {
+      type: "choice",
+      choice: "idea",
+      confidence: 0.93,
+      probabilities: { idea: 0.93, task: 0.07 },
+    },
+    urgent: { type: "noul", noul: 0.2 },
+  };
+
+  it("answers POST /decisions with model, answers and usage", async () => {
+    const server = await start({
+      rules: [{ lane: "jev", reply: answers, tokens: { input: 31, output: 4 } }],
+    });
+    const result = await ask(`${server.url}/decisions`, decision("a great idea"));
+    expect(result.status).toBe(200);
+    expect(JSON.parse(result.text)).toEqual({
+      model: "jev-1.14",
+      answers,
+      usage: { input_tokens: 31, output_tokens: 4 },
+    });
+    expect(server.calls[0]).toMatchObject({
+      lane: "jev",
+      method: "POST",
+      path: "/decisions",
+      rule: 0,
+    });
+  });
+
+  it("also answers under a version prefix such as /v1/decisions", async () => {
+    const server = await start({ rules: [{ lane: "jev", reply: answers }] });
+    expect((await ask(`${server.url}/v1/decisions`, decision("x"))).status).toBe(200);
+  });
+
+  it("matches a rule on the state and questions text", async () => {
+    const server = await start({
+      rules: [
+        { lane: "jev", contains: "buy milk", reply: { kind: { type: "choice", choice: "task" } } },
+        { lane: "jev", reply: answers },
+      ],
+    });
+    const first = await ask(`${server.url}/decisions`, decision({ text: "buy milk" }));
+    expect(JSON.parse(first.text).answers.kind.choice).toBe("task");
+    const second = await ask(`${server.url}/decisions`, decision("other"));
+    expect(JSON.parse(second.text).answers.kind.choice).toBe("idea");
+  });
+
+  it("returns a scenario error status with the reply as the message", async () => {
+    const server = await start({ rules: [{ lane: "jev", reply: "overloaded", status: 503 }] });
+    const result = await ask(`${server.url}/decisions`, decision("x"));
+    expect(result.status).toBe(503);
+    expect(result.text).toContain("overloaded");
+  });
+
+  it("refuses a call without a bearer key, without questions, or without a model", async () => {
+    const server = await start({ rules: [{ lane: "jev", reply: answers }] });
+    const url = `${server.url}/decisions`;
+    expect((await ask(url, decision("x"), { "content-type": "application/json" })).status).toBe(
+      401,
+    );
+    expect((await ask(url, decision("x", { questions: {} }))).status).toBe(400);
+    expect((await ask(url, { state: "x", questions: decision("x").questions })).status).toBe(400);
+    expect(server.unused()).toEqual([]);
+    expect(server.calls.every((call) => call.rule === null)).toBe(true);
+  });
+
+  it("answers 500 and records an unmatched call when no rule matches", async () => {
+    const server = await start({ rules: [{ lane: "jev", contains: "never", reply: answers }] });
+    const result = await ask(`${server.url}/decisions`, decision("x"));
+    expect(result.status).toBe(500);
+    expect(server.unmatched).toHaveLength(1);
+  });
+
+  it("does not answer an Ollama rule's call from a jev rule", async () => {
+    const server = await start({ rules: [{ lane: "ollama", reply: "o" }] });
+    expect((await ask(`${server.url}/decisions`, decision("x"))).status).toBe(500);
+  });
+});
+
 describe("FakeModelServer: the clock", () => {
   it("stamps Ollama replies from the injected clock", async () => {
     const clock = new FakeClock("2026-11-02T03:30:00Z");
@@ -295,10 +397,11 @@ describe("scenario files", () => {
     expect(() => loadScenario(write(JSON.stringify({ other: [] })))).toThrow(/scenario/i);
   });
 
-  it("refuses the jev lane, whose wire format the documents do not define", () => {
-    expect(() =>
-      loadScenario(write(JSON.stringify({ rules: [{ lane: "jev", reply: "x" }] }))),
-    ).toThrow(/rules\.0\.lane/);
+  it("loads a jev rule", () => {
+    const path = write(
+      JSON.stringify({ rules: [{ lane: "jev", reply: { q: { type: "noul" } } }] }),
+    );
+    expect(loadScenario(path).rules[0]?.lane).toBe("jev");
   });
 
   it("refuses a times count below one", () => {

@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { systemClock, type Clock } from "@discretion/core";
 import { z } from "zod";
 
-export type Lane = "ollama" | "frontier";
+export type Lane = "jev" | "ollama" | "frontier";
 
 const Rule = z
   .object({
