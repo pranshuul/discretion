@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "capture_id": {
+      "pattern": "^cap_[0-9]{8}_[0-9a-hjkmnp-tv-z]{6}$",
+      "type": "string"
+    },
+    "component": {
+      "type": "string"
+    },
+    "error_code": {
+      "pattern": "^D[1-7][0-9]{3}$",
+      "type": "string"
+    },
+    "fields": {
+      "additionalProperties": {},
+      "type": "object"
+    },
+    "level": {
+      "enum": [
+        "debug",
+        "info",
+        "warn",
+        "error"
+      ],
+      "type": "string"
+    },
+    "msg": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "ts": {
+      "format": "date-time",
+      "type": "string"
+    }
+  },
+  "required": [
+    "ts",
+    "level",
+    "component",
+    "msg"
+  ],
+  "title": "log/1",
+  "type": "object"
+}

@@ -1,0 +1,278 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "install": {
+      "additionalProperties": false,
+      "properties": {
+        "profiles": {
+          "additionalProperties": false,
+          "properties": {
+            "always_on": {
+              "type": "boolean"
+            },
+            "gpu_node": {
+              "type": "boolean"
+            },
+            "vps": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "timezone": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "models": {
+      "additionalProperties": false,
+      "properties": {
+        "jev": {
+          "additionalProperties": false,
+          "properties": {
+            "api_key": {
+              "type": "string"
+            },
+            "endpoint": {
+              "type": "string"
+            },
+            "max_input_tokens": {
+              "type": "integer"
+            },
+            "model": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "lanes": {
+          "additionalProperties": false,
+          "properties": {
+            "cheap_api": {
+              "type": "string"
+            },
+            "heavy": {
+              "type": "string"
+            },
+            "workhorse": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "local": {
+          "additionalProperties": false,
+          "properties": {
+            "endpoint": {
+              "type": "string"
+            },
+            "filing_model": {
+              "type": "string"
+            },
+            "librarian_model": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "transcription": {
+          "additionalProperties": false,
+          "properties": {
+            "fallback": {
+              "additionalProperties": false,
+              "properties": {
+                "endpoint": {
+                  "type": "string"
+                },
+                "kind": {
+                  "enum": [
+                    "phonon",
+                    "whisper"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "endpoint"
+              ],
+              "type": "object"
+            },
+            "primary": {
+              "additionalProperties": false,
+              "properties": {
+                "endpoint": {
+                  "type": "string"
+                },
+                "kind": {
+                  "enum": [
+                    "phonon",
+                    "whisper"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "endpoint"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "privacy": {
+      "additionalProperties": false,
+      "properties": {
+        "frontier_allowed": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "relay": {
+      "additionalProperties": false,
+      "properties": {
+        "token": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "schema": {
+      "const": "config/1",
+      "type": "string"
+    },
+    "spend": {
+      "additionalProperties": false,
+      "properties": {
+        "monthly_cap_usd": {
+          "type": "number"
+        },
+        "steps": {
+          "additionalProperties": false,
+          "properties": {
+            "digest": {
+              "type": "number"
+            },
+            "downgrade": {
+              "type": "number"
+            },
+            "pause": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "telegram": {
+      "additionalProperties": false,
+      "properties": {
+        "bot_token": {
+          "type": "string"
+        },
+        "owner_chat_id": {
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "tracking": {
+      "additionalProperties": false,
+      "properties": {
+        "estimate_padding": {
+          "type": "number"
+        },
+        "rhythm": {
+          "additionalProperties": false,
+          "properties": {
+            "long": {
+              "items": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            "long_break": {
+              "items": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            "long_break_every": {
+              "items": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            "short": {
+              "items": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "vault": {
+      "additionalProperties": false,
+      "properties": {
+        "idle_commit_minutes": {
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema"
+  ],
+  "title": "config/1",
+  "type": "object"
+}
