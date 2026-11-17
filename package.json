@@ -17,13 +17,16 @@
   },
   "devDependencies": {
     "@discretion/cli": "workspace:*",
+    "@discretion/core": "workspace:*",
     "@eslint/js": "^10.0.1",
     "@types/node": "^22.20.5",
     "eslint": "^10.14.0",
     "eslint-config-prettier": "^10.1.8",
+    "grammy": "^1.46.0",
     "prettier": "^3.10.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.72.2",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.0",
+    "zod": "^3.25.76"
   }
 }
