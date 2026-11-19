@@ -3,23 +3,45 @@ import { loadDesign, parseQuestions } from "../src/design.js";
 
 const design = (): string => loadDesign();
 
-/** Text of the "## <title>" section, up to the next level-2 heading. */
-function section(text: string, title: string): string {
-  const start = text.indexOf(`\n## ${title}\n`);
-  expect(start, `section ${title}`).toBeGreaterThanOrEqual(0);
-  const rest = text.slice(start + 1);
-  const next = rest.indexOf("\n## ", 1);
-  return next < 0 ? rest : rest.slice(0, next);
+/** Lines outside fenced code blocks, with their index. */
+function proseLines(text: string): { line: string; at: number }[] {
+  const out: { line: string; at: number }[] = [];
+  let fence = "";
+  text.split("\n").forEach((line, at) => {
+    const m = /^(`{3,})/.exec(line);
+    if (m) {
+      if (!fence) fence = m[1] ?? "";
+      else if (line.trim() === fence) fence = "";
+      return;
+    }
+    if (!fence) out.push({ line, at });
+  });
+  return out;
 }
 
-/** Level-3 headings of a section, in order. */
+/** Text of the "## <title>" section, up to the next level-2 heading outside code. */
+function section(text: string, title: string): string {
+  const lines = text.split("\n");
+  const heads = proseLines(text).filter((l) => l.line.startsWith("## "));
+  const i = heads.findIndex((l) => l.line === `## ${title}`);
+  expect(i, `section ${title}`).toBeGreaterThanOrEqual(0);
+  const from = heads[i]?.at ?? 0;
+  const to = heads[i + 1]?.at ?? lines.length;
+  return lines.slice(from, to).join("\n");
+}
+
+/** Level-3 headings of a section outside code, in order. */
 function headings(text: string): string[] {
-  return [...text.matchAll(/^### (.+)$/gm)].map((m) => m[1] ?? "");
+  return proseLines(text)
+    .filter((l) => l.line.startsWith("### "))
+    .map((l) => l.line.slice(4));
 }
 
 describe("Roots DESIGN.md", () => {
   it("has the top-level sections in order", () => {
-    const titles = [...design().matchAll(/^## (.+)$/gm)].map((m) => m[1]);
+    const titles = proseLines(design())
+      .filter((l) => l.line.startsWith("## "))
+      .map((l) => l.line.slice(3));
     expect(titles).toEqual([
       "Notes and paths",
       "Plugins",
@@ -144,7 +166,7 @@ describe("Roots DESIGN.md", () => {
       expect(buttons).toContain("`" + t + "`");
     }
     expect(buttons).toContain("Accept");
-    expect(buttons).toContain("type: button");
+    expect(buttons.match(/```meta-bind-button/g)).toHaveLength(4);
   });
 
   it("defines the eight Wheel of Life areas", () => {
