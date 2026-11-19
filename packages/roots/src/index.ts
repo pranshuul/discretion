@@ -1,1 +1,1 @@
-export { loadDesign, parseQuestions } from "./design.js";
+export { buttonCode, loadDesign, parseQuestions, querySnippet } from "./design.js";

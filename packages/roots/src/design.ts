@@ -18,3 +18,17 @@ export function parseQuestions(design: string): string[] {
   }
   return prompts;
 }
+
+/** The code of the first `js` block under "### <heading>" in the "Recap queries" section. */
+export function querySnippet(design: string, heading: string): string {
+  void design;
+  void heading;
+  throw new Error("red");
+}
+
+/** The inlineJS code of the Meta Bind button whose label is `label`, dedented. */
+export function buttonCode(design: string, label: string): string {
+  void design;
+  void label;
+  throw new Error("red");
+}
