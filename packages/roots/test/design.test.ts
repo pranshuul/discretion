@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { loadDesign, parseQuestions } from "../src/design.js";
+import * as roots from "../src/index.js";
+import { loadDesign, parseQuestions } from "./design-helpers.js";
 
 const design = (): string => loadDesign();
 
@@ -183,6 +184,33 @@ describe("Roots DESIGN.md", () => {
     ]) {
       expect(wheel).toContain(`wheel.${a}`);
     }
+  });
+
+  it("puts the Wheel of Life sliders and wheel: frontmatter only in weekly notes", () => {
+    const d = design();
+    const weekly = section(d, "Weekly note");
+    expect(weekly).toContain("`wheel:`");
+    expect(weekly).toMatch(/slider/i);
+    for (const kind of ["Monthly", "Quarterly", "Yearly"]) {
+      const s = section(d, `${kind} note`);
+      expect(s, kind).not.toContain("`wheel:`");
+      expect(s, kind).not.toMatch(/slider/i);
+      expect(s, kind).toContain("Wheel progression");
+    }
+    const wheel = section(d, "Wheel of Life");
+    expect(wheel).toContain("Thursday");
+    expect(wheel).not.toMatch(/monthly, quarterly and yearly notes hold their own sliders/);
+  });
+
+  it("lists DataviewJS as a required setting that install writes", () => {
+    const plugins = section(design(), "Plugins");
+    expect(plugins).toContain("enableDataviewJs: true");
+    expect(plugins).toContain("enableInlineDataviewJs: true");
+    expect(plugins).toMatch(/discretion roots install` writes/);
+  });
+
+  it("keeps DESIGN.md parsing out of the package's public API", () => {
+    expect(Object.keys(roots)).toEqual([]);
   });
 
   it("defines the recap queries and the colours", () => {
