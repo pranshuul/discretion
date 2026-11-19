@@ -109,14 +109,7 @@ The habit stamper writes one line per habit due that day between the markers. A 
 <!-- discretion:plan:end -->
 ```
 
-Rewritten after every replan from `plans/YYYY-MM-DD.json`, one line per block: `- 10:00–10:45 [[tsk_…|title]] (deep technical, 45/10)`. Read-only: edits here are overwritten. Below the markers sits a live task query:
-
-```dataview
-TABLE WITHOUT ID file.link AS Task, status AS Status
-FROM "3-Mycelium/tasks"
-WHERE scheduled = this.date
-SORT file.name ASC
-```
+Rewritten after every replan from `plans/YYYY-MM-DD.json`, one line per block: `- 10:00–10:45 [[tsk_…|title]] (deep technical, 45/10)`. Read-only: edits here are overwritten. The renderer writes the empty marker pair only.
 
 ### 7. Quick notes
 
@@ -389,15 +382,15 @@ The Summary of each quarterly note in the year, in date order.
 
 ## Home note
 
-`Roots.md` is created once, at install. Frontmatter is `roots: 1` and `kind: home`. Top to bottom:
+`Roots.md` is created once, at install, and never rendered again, so everything that depends on the date is a query that runs when the note is opened. Frontmatter is `roots: 1` and `kind: home`. Top to bottom, each part after the title under a `##` heading of the same name:
 
-1. `# Roots` and links to today's note and this week's note, resolved when the note is rendered and refreshed by the queries below only for the data they show.
-2. **Today**: `dataviewjs` showing today's alias, rating and Habits state.
-3. **This week**: the Ratings query for the current ISO week.
-4. **Streaks**: for each habit, its current streak (the Habits query's streak function, ending today).
-5. **30-day rating trend**: the Ratings query in trend mode over the last 30 days.
+1. `# Roots`.
+2. **Today**: links to today's note and this week's note, then today's alias, rating and the state of each habit. One block: Home preamble with `range` `"today"`, then the Today body.
+3. **This week**: the current ISO week's average and a bar per day. One block: Home preamble with `range` `"week"`, then Rating chart, then the Ratings body with `mode` `"bars"`.
+4. **Streaks**: each habit's current streak, ending today. One block: Home preamble with `range` `"all"`, then Streak, then the Streaks body.
+5. **30-day rating trend**: the last 30 days, today included. One block: Home preamble with `range` `"30 days"`, then Rating chart, then the Ratings body with `mode` `"trend"`.
 
-The query bodies are those of Recap queries with `from` and `to` taken from today instead of the note.
+The snippets are under Recap queries. Home has no frontmatter range; the Home preamble computes `from` and `to` from today instead.
 
 ## Buttons
 
@@ -476,52 +469,133 @@ Home has no buttons. The recap notes have none.
 
 ## Recap queries
 
-Every query runs inside a `dataviewjs` block and shares this preamble, which reads the note's own range. Days are the daily notes in the range.
+Every query in a note is one `dataviewjs` block that the renderer assembles from the snippets below, joined by a blank line: a preamble first (Preamble in recap notes, Home preamble in `Roots.md`), then the helpers the body calls (Rating chart, Streak), then the body. Which blocks each note holds is listed under its note kind; the table gives each body's helpers.
 
-```dataviewjs
+| Body              | Helpers      | Used in                                        |
+| ----------------- | ------------ | ---------------------------------------------- |
+| Ratings           | Rating chart | Every recap; Home's This week and 30-day trend |
+| Logs              | —            | Every recap                                    |
+| Days              | —            | Every recap                                    |
+| Habits            | Streak       | Weekly                                         |
+| Heatmap           | —            | Monthly, quarterly, yearly                     |
+| Wheel progression | —            | Monthly, quarterly, yearly                     |
+| Notes below       | —            | Quarterly, yearly                              |
+| Today             | —            | Home                                           |
+| Streaks           | Streak       | Home                                           |
+
+Days are the daily notes whose `date` lies in the range, oldest first. Dataview reads `date`, `from` and `to` as dates.
+
+### Preamble
+
+The recap notes' preamble reads the note's own range from its `from` and `to`.
+
+```js
 const cur = dv.current();
 const from = dv.date(cur.from);
 const to = dv.date(cur.to);
+const today = dv.date("today");
 const days = dv
   .pages('"1-Roots/Daily"')
   .where((p) => p.date && p.date >= from && p.date <= to)
   .sort((p) => p.date, "asc")
   .array();
-const colour = (name) => `var(--roots-${name})`;
+```
+
+### Home preamble
+
+Home's preamble computes the range from today. The renderer sets `range` per block: `"today"` is today alone, `"week"` is the current ISO week from Monday to Sunday, `"30 days"` is today and the 29 days before it, and `"all"` is every daily note up to today.
+
+```js
+const today = dv.date("today");
+const range = "week";
+const from = {
+  today: today,
+  week: today.minus({ days: today.weekday - 1 }),
+  "30 days": today.minus({ days: 29 }),
+  all: null,
+}[range];
+const to = range === "week" ? from.plus({ days: 6 }) : today;
+const days = dv
+  .pages('"1-Roots/Daily"')
+  .where((p) => p.date && (from === null || p.date >= from) && p.date <= to)
+  .sort((p) => p.date, "asc")
+  .array();
+```
+
+### Rating chart
+
+`ratingChart(points, mode)` returns the SVG for a list of `{ label, rating }`, one per day, oldest first, with `rating` `null` when the day is unrated. Ratings run from 1 at the bottom to 10 at the top, inside a 5-unit margin.
+
+- `"bars"`: one bar per day, 28 units wide, so the viewBox is 28 units per day. An unrated day is a short grey stub.
+- `"trend"`: the viewBox is always 360 by 100 and the days are spread evenly across it, the first at the left margin and the last at the right, however many there are. Rated days are joined by a line and each has a dot, so a single rated day still shows; unrated days leave a gap in the spacing but no point.
+
+```js
+const ratingChart = (points, mode) => {
+  const H = 100;
+  const pad = 5;
+  const y = (r) => pad + ((10 - r) * (H - 2 * pad)) / 9;
+  const title = (p) => `<title>${p.label}: ${p.rating ?? "–"}</title>`;
+  if (mode === "bars") {
+    const W = 28;
+    const bars = points.map((p, i) =>
+      p.rating === null
+        ? `<rect x="${i * W + 4}" y="${H - 4}" width="${W - 8}" height="4" class="roots-pending">${title(p)}</rect>`
+        : `<rect x="${i * W + 4}" y="${y(p.rating)}" width="${W - 8}" height="${H - y(p.rating)}" class="roots-bar">${title(p)}</rect>`,
+    );
+    return `<svg class="roots-chart" viewBox="0 0 ${Math.max(points.length, 1) * W} ${H}" width="100%">${bars.join("")}</svg>`;
+  }
+  const width = 360;
+  const x = (i) =>
+    points.length > 1 ? pad + (i * (width - 2 * pad)) / (points.length - 1) : width / 2;
+  const rated = points.flatMap((p, i) =>
+    p.rating === null ? [] : [{ p, x: x(i).toFixed(1), y: y(p.rating).toFixed(1) }],
+  );
+  const line =
+    rated.length > 1
+      ? `<polyline points="${rated.map((r) => `${r.x},${r.y}`).join(" ")}" class="roots-line"/>`
+      : "";
+  const dots = rated.map(
+    (r) => `<circle cx="${r.x}" cy="${r.y}" r="3" class="roots-dot">${title(r.p)}</circle>`,
+  );
+  return `<svg class="roots-chart" viewBox="0 0 ${width} ${H}" width="100%">${line}${dots.join("")}</svg>`;
+};
 ```
 
 ### Ratings
 
-Weekly mode draws one bar per day; trend mode draws a polyline. Both print the average of rated days first.
+The average of the range's rated days, then the chart. `mode` is `"bars"` in weekly notes and Home's This week, and the renderer writes `"trend"` in monthly, quarterly and yearly notes and Home's 30-day trend.
 
-```dataviewjs
-// preamble above, then:
-const mode = "bars"; // "trend" in monthly, quarterly, yearly and Home
+```js
+const mode = "bars";
 const rated = days.filter((p) => typeof p.rating === "number");
-const avg = rated.length ? rated.reduce((s, p) => s + p.rating, 0) / rated.length : null;
-dv.paragraph(avg === null ? "No ratings yet." : `Average rating: **${avg.toFixed(1)}** over ${rated.length} days`);
-const W = 28, H = 100, svg = [];
-if (mode === "bars") {
-  days.forEach((p, i) => {
-    const h = typeof p.rating === "number" ? p.rating * 10 : 4;
-    const fill = typeof p.rating === "number" ? "var(--roots-bar)" : colour("pending");
-    svg.push(`<rect x="${i * W + 4}" y="${H - h}" width="${W - 8}" height="${h}" fill="${fill}"><title>${p.date.toFormat("ccc d LLL")}: ${p.rating ?? "–"}</title></rect>`);
-  });
-} else {
-  const step = days.length > 1 ? (W * 12) / (days.length - 1) : 0;
-  const pts = days
-    .map((p, i) => (typeof p.rating === "number" ? `${i * step},${H - p.rating * 10}` : null))
-    .filter(Boolean);
-  svg.push(`<polyline points="${pts.join(" ")}" fill="none" stroke="var(--roots-bar)" stroke-width="2"/>`);
-}
-dv.el("div", `<svg class="roots-chart" viewBox="0 0 ${Math.max(days.length, 12) * W} ${H}" width="100%">${svg.join("")}</svg>`);
+const average = rated.length ? rated.reduce((s, p) => s + p.rating, 0) / rated.length : null;
+dv.paragraph(
+  average === null
+    ? "No ratings yet."
+    : `Average rating: **${average.toFixed(1)}** over ${rated.length} days`,
+);
+dv.el(
+  "div",
+  ratingChart(
+    days.map((p) => ({
+      label: p.date.toFormat("ccc d LLL"),
+      rating: typeof p.rating === "number" ? p.rating : null,
+    })),
+    mode,
+  ),
+);
 ```
 
 ### Logs
 
-```dataviewjs
-// preamble above, then:
-const kinds = [["Progress", "progress"], ["Highlights", "highlight"], ["Ideas", "idea"]];
+Progress, Highlights and Ideas, gathered by tag from the range's daily notes. The `#captured` tag and block id of captured lines are dropped from the shown text, and empty lines left by an unused button are skipped.
+
+```js
+const kinds = [
+  ["Progress", "progress"],
+  ["Highlights", "highlight"],
+  ["Ideas", "idea"],
+];
 for (const [title, tag] of kinds) {
   dv.header(4, title);
   const out = [];
@@ -530,7 +604,8 @@ for (const [title, tag] of kinds) {
     const re = new RegExp(`^\\s*- #${tag}\\b\\s*(.*)$`);
     for (const line of text.split("\n")) {
       const m = re.exec(line);
-      if (m && m[1].trim()) out.push(`${m[1].replace(/\s+#captured.*$/, "").trim()} — ${p.file.link}`);
+      if (m && m[1].trim())
+        out.push(`${m[1].replace(/\s+#captured.*$/, "").trim()} — ${p.file.link}`);
     }
   }
   dv.list(out.length ? out : ["Nothing logged."]);
@@ -539,39 +614,52 @@ for (const [title, tag] of kinds) {
 
 ### Days
 
-```dataviewjs
-// preamble above, then:
+```js
 dv.table(
   ["Day", "Alias", "Rating"],
   days.map((p) => [p.file.link, p.alias ?? "", p.rating ?? ""]),
 );
 ```
 
+### Streak
+
+`streak(states, openLast)` counts a habit's current streak from its state on each day, oldest first, with `undefined` for days it was not due. Walking back from the last day, `done` adds one, a day it was not due is passed over, and anything else ends the streak: `missed`, `skipped`, or `pending` on a day that is over. `openLast` is true when the last day is today; its `pending` is passed over, since the day is not over yet.
+
+```js
+const streak = (states, openLast) => {
+  let n = 0;
+  for (let i = states.length - 1; i >= 0; i--) {
+    const s = states[i];
+    if (s === "done") n++;
+    else if (s === undefined || (s === "pending" && openLast && i === states.length - 1)) continue;
+    else break;
+  }
+  return n;
+};
+```
+
 ### Habits
 
-The grid has one row per habit and one cell per day, coloured by state, then the streak (consecutive `done` days ending at the last day of the range or today if earlier) and the completion count (`done` days over days the habit was stamped).
+The weekly grid: one row per habit and one cell per day, coloured by state (a day the habit was not due is grey like the future), then the streak over the days up to today, then the completion count, `done` days over days the habit was stamped.
 
-```dataviewjs
-// preamble above, then:
+```js
 const ids = [...new Set(days.flatMap((p) => Object.keys(p.habits ?? {})))].sort();
-const states = ["pending", "done", "skipped", "missed"];
-const today = dv.date("today");
+const known = ["pending", "done", "skipped", "missed"];
+const past = days.filter((p) => p.date <= today);
+const openLast = past.length > 0 && +past[past.length - 1].date === +today;
 const rows = ids.map((id) => {
   const cells = days.map((p) => {
     const s = (p.habits ?? {})[id];
-    const state = !s ? "future" : s === "pending" && p.date < today ? "pending" : states.includes(s) ? s : "future";
+    const state = known.includes(s) ? s : "future";
     return `<span class="roots-cell roots-${state}" title="${p.date.toFormat("ccc d LLL")}: ${s ?? "not due"}"></span>`;
   });
-  let streak = 0;
-  for (let i = days.length - 1; i >= 0; i--) {
-    const s = (days[i].habits ?? {})[id];
-    if (s === "done") streak++;
-    else if (s === undefined || (s === "pending" && days[i].date >= today)) continue;
-    else break;
-  }
+  const n = streak(
+    past.map((p) => (p.habits ?? {})[id]),
+    openLast,
+  );
   const stamped = days.filter((p) => (p.habits ?? {})[id]).length;
   const done = days.filter((p) => (p.habits ?? {})[id] === "done").length;
-  return [id, cells.join(""), `${streak} 🔥`, `${done}/${stamped}`];
+  return [id, cells.join(""), n, `${done}/${stamped}`];
 });
 dv.table(["Habit", "Days", "Streak", "Done"], rows);
 ```
@@ -580,8 +668,7 @@ dv.table(["Habit", "Days", "Streak", "Done"], rows);
 
 Used instead of the grid in monthly, quarterly and yearly notes: one calendar per habit, seven rows (Monday first) by one column per week, and the completion percentage in the heading.
 
-```dataviewjs
-// preamble above, then:
+```js
 const ids = [...new Set(days.flatMap((p) => Object.keys(p.habits ?? {})))].sort();
 for (const id of ids) {
   const stamped = days.filter((p) => (p.habits ?? {})[id]);
@@ -592,34 +679,46 @@ for (const id of ids) {
   const cells = [];
   for (let d = first; d <= to; d = d.plus({ days: 1 })) {
     const col = Math.floor(d.diff(first, "days").days / 7);
-    const inRange = d >= from;
-    const s = byDate.get(d.toFormat("yyyy-MM-dd"));
-    const state = !inRange || !s ? "future" : s;
-    cells.push(`<rect x="${col * 14}" y="${(d.weekday - 1) * 14}" width="12" height="12" rx="2" class="roots-${state}"><title>${d.toFormat("d LLL")}: ${s ?? "not due"}</title></rect>`);
+    const s = d >= from ? byDate.get(d.toFormat("yyyy-MM-dd")) : undefined;
+    const state = s ?? "future";
+    cells.push(
+      `<rect x="${col * 14}" y="${(d.weekday - 1) * 14}" width="12" height="12" rx="2" class="roots-${state}"><title>${d.toFormat("d LLL")}: ${s ?? "not due"}</title></rect>`,
+    );
   }
   const weeks = Math.ceil((to.diff(first, "days").days + 1) / 7);
   dv.header(4, `${id} — ${pct}%`);
-  dv.el("div", `<svg class="roots-chart" viewBox="0 0 ${weeks * 14} 98" width="${Math.min(weeks * 14, 720)}">${cells.join("")}</svg>`);
+  dv.el(
+    "div",
+    `<svg class="roots-chart" viewBox="0 0 ${weeks * 14} 98" width="${Math.min(weeks * 14, 720)}">${cells.join("")}</svg>`,
+  );
 }
 ```
 
 ### Wheel progression
 
-Each area's average of the sub-notes' `wheel.<area>` values: per week in a monthly note, per month in a quarterly note, per quarter in a yearly note. Empty values are skipped. The sub-notes are the recap notes of the next smaller kind whose range lies inside this note's.
+Each area's value in the sub-notes' `wheel.<area>`: per week in a monthly note, per month in a quarterly note, per quarter in a yearly note. Empty values show as a dash. The sub-notes are the recap notes of the next smaller kind whose range lies inside this note's.
 
-```dataviewjs
-// preamble above, then:
+```js
 const sub = { monthly: "Weekly", quarterly: "Monthly", yearly: "Quarterly" }[cur.kind];
-const areas = ["health", "career", "relationships", "finance", "growth", "recreation", "social", "spirituality"];
+const areas = [
+  "health",
+  "career",
+  "relationships",
+  "finance",
+  "growth",
+  "recreation",
+  "social",
+  "spirituality",
+];
 const notes = dv
   .pages(`"1-Roots/${sub}"`)
   .where((p) => p.from && dv.date(p.from) >= from && dv.date(p.to) <= to)
   .sort((p) => p.from, "asc")
   .array();
-const avg = (p, a) => (typeof p.wheel?.[a] === "number" ? p.wheel[a] : null);
+const value = (p, a) => (typeof p.wheel?.[a] === "number" ? p.wheel[a] : "–");
 dv.table(
   ["Area", ...notes.map((p) => p.file.name)],
-  areas.map((a) => [a, ...notes.map((p) => avg(p, a) ?? "–")]),
+  areas.map((a) => [a, ...notes.map((p) => value(p, a))]),
 );
 ```
 
@@ -627,8 +726,7 @@ dv.table(
 
 Used in quarterly and yearly notes. It quotes each lower note's Summary span by reading the file text between its markers.
 
-```dataviewjs
-// preamble above, then:
+```js
 const sub = cur.kind === "quarterly" ? "Monthly" : "Quarterly";
 const notes = dv
   .pages(`"1-Roots/${sub}"`)
@@ -641,6 +739,45 @@ for (const p of notes) {
   dv.header(4, p.file.link);
   dv.paragraph(m && m[1].trim() ? m[1].trim() : "No summary yet.");
 }
+```
+
+### Today
+
+Home's Today block. The week link uses the ISO week-year, which differs from the calendar year in the first and last days of some years.
+
+```js
+const day = `1-Roots/Daily/${today.toFormat("yyyy/MM/yyyy-MM-dd")}`;
+const week = `1-Roots/Weekly/${today.toFormat("kkkk")}/${today.toFormat("kkkk-'W'WW")}`;
+dv.paragraph(`[[${day}|Today's note]] · [[${week}|This week]]`);
+const p = days[0];
+if (!p) {
+  dv.paragraph("Today's note has not been created yet.");
+} else {
+  dv.paragraph(`${p.alias || "No alias yet"} · rating ${p.rating ?? "–"}/10`);
+  const habits = Object.entries(p.habits ?? {}).sort(([a], [b]) => (a < b ? -1 : 1));
+  if (habits.length) dv.table(["Habit", "State"], habits);
+}
+```
+
+### Streaks
+
+Home's Streaks block: every habit stamped on any day, with its current streak ending today.
+
+```js
+const ids = [...new Set(days.flatMap((p) => Object.keys(p.habits ?? {})))].sort();
+const openLast = days.length > 0 && +days[days.length - 1].date === +today;
+if (!ids.length) dv.paragraph("No habits stamped yet.");
+else
+  dv.table(
+    ["Habit", "Streak"],
+    ids.map((id) => [
+      id,
+      streak(
+        days.map((p) => (p.habits ?? {})[id]),
+        openLast,
+      ),
+    ]),
+  );
 ```
 
 ## Wheel of Life
@@ -709,6 +846,17 @@ body {
 .roots-cell.roots-future {
   fill: var(--roots-future);
   background: var(--roots-future);
+}
+.roots-chart rect.roots-bar {
+  fill: var(--roots-bar);
+}
+.roots-chart .roots-line {
+  fill: none;
+  stroke: var(--roots-bar);
+  stroke-width: 2;
+}
+.roots-chart .roots-dot {
+  fill: var(--roots-bar);
 }
 .roots-cell {
   display: inline-block;
