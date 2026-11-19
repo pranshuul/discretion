@@ -31,13 +31,15 @@ _roots/
 
 ## Plugins
 
-| Plugin    | Used for                                                                |
-| --------- | ----------------------------------------------------------------------- |
-| Templater | Creating notes inside Obsidian by calling the shared renderer           |
-| Dataview  | Every rollup, list, chart and heatmap (DQL and `dataviewjs`)            |
-| Meta Bind | The rating slider, alias input, wheel sliders, habit inputs and buttons |
+| Plugin    | Used for                                                                       |
+| --------- | ------------------------------------------------------------------------------ |
+| Templater | Creating notes inside Obsidian by calling the shared renderer                  |
+| Dataview  | Every rollup, list, chart and heatmap (DQL and `dataviewjs`)                   |
+| Meta Bind | The rating slider, alias input, weekly wheel sliders, habit inputs and buttons |
 
-`discretion roots install` downloads each plugin from its official GitHub release at a pinned version, checks the SHA-256 of every file, and records the result in `~/vault/.discretion/plugins.lock.json`. It refuses on a hash mismatch (D2010). `discretion doctor` and `discretion roots status` flag drift. The `.obsidian` settings Roots needs are: Templater's template folder `1-Roots/_roots/templates` and user-script folder `1-Roots/_roots/scripts`, the core Daily notes plugin off, and the `roots` CSS snippet on. Dataview runs with JavaScript queries enabled.
+`discretion roots install` downloads each plugin from its official GitHub release at a pinned version, checks the SHA-256 of every file, and records the result in `~/vault/.discretion/plugins.lock.json`. It refuses on a hash mismatch (D2010). `discretion doctor` and `discretion roots status` flag drift. The `.obsidian` settings Roots needs are: Templater's template folder `1-Roots/_roots/templates` and user-script folder `1-Roots/_roots/scripts`, the core Daily notes plugin off, and the `roots` CSS snippet on.
+
+The charts are `dataviewjs` blocks, so Roots also needs Dataview's JavaScript queries, a required setting the plan's install step must write too: `discretion roots install` writes Dataview's settings file, `.obsidian/plugins/dataview/data.json`, with `enableDataviewJs: true` and `enableInlineDataviewJs: true`, alongside the settings above. Other Dataview settings keep their defaults.
 
 ## Daily note
 
@@ -278,7 +280,7 @@ Three prompts, with room under each for Pranshul's answer.
 
 ## Monthly note
 
-Frontmatter: `roots: 1`, `kind: monthly`, `from`, `to` (first and last day of the month), `wheel:`. Title `# November 2026`, with links to the previous and next month and the year. The sections are the same seven as the weekly note and in the same order, over the month's days, with these differences. Ratings shows the rating trend (the Ratings query's `trend` mode, one point per day) instead of a bar per day. Habits shows a calendar heatmap per habit and its completion percentage instead of the grid (the Heatmap query). Wheel of Life shows the sliders and, below them, each area's average per week (the Wheel progression query). The Reflection prompts say "month" for "week".
+Frontmatter: `roots: 1`, `kind: monthly`, `from`, `to` (first and last day of the month); there is no `wheel` key. Title `# November 2026`, with links to the previous and next month and the year. The sections are the same seven as the weekly note and in the same order, over the month's days, with these differences. Ratings shows the rating trend (the Ratings query's `trend` mode, one point per day) instead of a bar per day. Habits shows a calendar heatmap per habit and its completion percentage instead of the grid (the Heatmap query). Wheel of Life has no inputs: it shows each area's value per week, computed from the weekly notes (the Wheel progression query). The Reflection prompts say "month" for "week".
 
 ### Ratings
 
@@ -298,7 +300,7 @@ A heatmap and completion percentage per habit.
 
 ### Wheel of Life
 
-Sliders, then the per-week averages.
+The Wheel progression, one column per week of the month.
 
 ### Summary
 
@@ -310,7 +312,7 @@ Sliders, then the per-week averages.
 
 ## Quarterly note
 
-Frontmatter: `roots: 1`, `kind: quarterly`, `from`, `to`, `wheel:`. Title `# 2026 Q4`, with links to the previous and next quarter. The sections are those of the monthly note, over the quarter's days, with the Wheel progression showing each area's average per month, and one added section, Notes below, between Wheel of Life and Summary.
+Frontmatter: `roots: 1`, `kind: quarterly`, `from`, `to`; no `wheel` key. Title `# 2026 Q4`, with links to the previous and next quarter. The sections are those of the monthly note, over the quarter's days, with the Wheel progression showing each area's average of the weekly values per month, and one added section, Notes below, between Wheel of Life and Summary.
 
 ### Ratings
 
@@ -330,7 +332,7 @@ A heatmap and completion percentage per habit.
 
 ### Wheel of Life
 
-Sliders, then the per-month averages.
+The Wheel progression, one column per month of the quarter.
 
 ### Notes below
 
@@ -346,7 +348,7 @@ The Summary of each monthly note in the quarter, in date order (the Notes below 
 
 ## Yearly note
 
-Frontmatter: `roots: 1`, `kind: yearly`, `from`, `to`, `wheel:`. Title `# 2026`, with links to the previous and next year. The sections are those of the quarterly note, over the year's days, with the Wheel progression showing each area's average per quarter, and Notes below listing the Summary of each quarterly note.
+Frontmatter: `roots: 1`, `kind: yearly`, `from`, `to`; no `wheel` key. Title `# 2026`, with links to the previous and next year. The sections are those of the quarterly note, over the year's days, with the Wheel progression showing each area's average of the weekly values per quarter, and Notes below listing the Summary of each quarterly note.
 
 ### Ratings
 
@@ -366,7 +368,7 @@ A heatmap and completion percentage per habit.
 
 ### Wheel of Life
 
-Sliders, then the per-quarter averages.
+The Wheel progression, one column per quarter of the year.
 
 ### Notes below
 
@@ -696,10 +698,9 @@ for (const id of ids) {
 
 ### Wheel progression
 
-Each area's value in the sub-notes' `wheel.<area>`: per week in a monthly note, per month in a quarterly note, per quarter in a yearly note. Empty values show as a dash. The sub-notes are the recap notes of the next smaller kind whose range lies inside this note's.
+Used in monthly, quarterly and yearly notes, which have no wheel inputs of their own. Every value comes from the weekly notes' `wheel.<area>`. A week belongs to the period that contains its Thursday (the ISO 8601 rule; see Wheel of Life), so a week that straddles two months, quarters or years counts once. The columns are the periods of the note: each ISO week whose Thursday falls in the month (labelled `W45`), each month of the quarter (`Oct`), or each quarter of the year (`Q1`). A cell is the average of that area over the weeks in the column that have a value, rounded to one decimal; a cell with no value is blank, not zero.
 
 ```js
-const sub = { monthly: "Weekly", quarterly: "Monthly", yearly: "Quarterly" }[cur.kind];
 const areas = [
   "health",
   "career",
@@ -710,15 +711,39 @@ const areas = [
   "social",
   "spirituality",
 ];
-const notes = dv
-  .pages(`"1-Roots/${sub}"`)
-  .where((p) => p.from && dv.date(p.from) >= from && dv.date(p.to) <= to)
-  .sort((p) => p.from, "asc")
-  .array();
-const value = (p, a) => (typeof p.wheel?.[a] === "number" ? p.wheel[a] : "–");
+const periods = [];
+if (cur.kind === "monthly") {
+  for (
+    let thursday = from.plus({ days: (11 - from.weekday) % 7 });
+    thursday <= to;
+    thursday = thursday.plus({ days: 7 })
+  )
+    periods.push({ label: thursday.toFormat("'W'WW"), start: thursday, end: thursday });
+} else {
+  const months = cur.kind === "quarterly" ? 1 : 3;
+  for (let start = from; start <= to; start = start.plus({ months }))
+    periods.push({
+      label: cur.kind === "quarterly" ? start.toFormat("LLL") : start.toFormat("'Q'q"),
+      start,
+      end: start.plus({ months }).minus({ days: 1 }),
+    });
+}
+const weeks = dv
+  .pages('"1-Roots/Weekly"')
+  .where((p) => p.from)
+  .array()
+  .map((p) => ({ wheel: p.wheel ?? {}, thursday: dv.date(p.from).plus({ days: 3 }) }));
+const cell = (period, area) => {
+  const values = weeks
+    .filter((w) => w.thursday >= period.start && w.thursday <= period.end)
+    .map((w) => w.wheel[area])
+    .filter((v) => typeof v === "number");
+  if (!values.length) return "";
+  return Math.round((10 * values.reduce((s, v) => s + v, 0)) / values.length) / 10;
+};
 dv.table(
-  ["Area", ...notes.map((p) => p.file.name)],
-  areas.map((a) => [a, ...notes.map((p) => value(p, a))]),
+  ["Area", ...periods.map((x) => x.label)],
+  areas.map((a) => [a, ...periods.map((x) => cell(x, a))]),
 );
 ```
 
@@ -782,7 +807,9 @@ else
 
 ## Wheel of Life
 
-Eight areas, in this order: health, career, relationships, finance, growth, recreation, social, spirituality. Each recap note has one slider per area, bound to the matching `wheel.<area>` key in its own frontmatter, and the key stays empty until Pranshul sets it:
+Eight areas, in this order: health, career, relationships, finance, growth, recreation, social, spirituality.
+
+Only weekly notes have inputs. A weekly note has one slider per area, bound to the matching `wheel.<area>` key in its own frontmatter, and the key stays empty until Pranshul sets it:
 
 ```markdown
 Health INPUT[slider(minValue(1), maxValue(10), stepSize(1), addLabels):wheel.health]
@@ -807,7 +834,11 @@ wheel:
   spirituality:
 ```
 
-Wheel of Life values are public to frontier models. Weekly notes hold the sliders; monthly, quarterly and yearly notes hold their own sliders too, and the Wheel progression query shows how the sub-notes' values moved.
+Monthly, quarterly and yearly notes have no wheel inputs and no `wheel` key. Their Wheel of Life section is the Wheel progression query, computed from the weekly notes: a monthly note shows one value per week, a quarterly note one per month and a yearly note one per quarter, each the average of that area's weekly values over the period. An area with no weekly value in a period is blank, not zero.
+
+A week belongs to the month, and so to the quarter and year, that contains its Thursday, the ISO 8601 rule, so every week counts exactly once. Week 2026-W44 (26 October to 1 November) belongs to October; week 2026-W53 (28 December 2026 to 3 January 2027, which holds 1 January 2027) belongs to December 2026 and to the year 2026.
+
+Wheel of Life values are public to frontier models.
 
 ## Colours
 
