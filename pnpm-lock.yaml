@@ -216,6 +216,9 @@ importers:
       '@discretion/core':
         specifier: workspace:*
         version: link:../core
+      '@discretion/roots':
+        specifier: workspace:*
+        version: link:../roots
 
   packages/core:
     dependencies:
@@ -251,7 +254,14 @@ importers:
 
   packages/reels: {}
 
-  packages/roots: {}
+  packages/roots:
+    dependencies:
+      '@discretion/core':
+        specifier: workspace:*
+        version: link:../core
+      '@discretion/model':
+        specifier: workspace:*
+        version: link:../model
 
   packages/tracker: {}
 

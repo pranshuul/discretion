@@ -84,3 +84,10 @@ export function buttonCode(design: string, label: string): string {
   }
   throw new Error(`DESIGN.md has no button labelled ${label}`);
 }
+
+/** The text of the first fenced block with `info` under "## h2" (and "### h3" when given). */
+export function fenced(design: string, h2: string, h3: string, info: string): string {
+  const b = blocks(design).find((x) => x.h2 === h2 && x.h3 === h3 && x.info === info);
+  if (!b) throw new Error(`DESIGN.md has no ${info} block under ${h2} / ${h3}`);
+  return b.body.join("\n");
+}

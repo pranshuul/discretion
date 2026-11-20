@@ -15,10 +15,20 @@ import {
   renderSchemas,
   runSchemas,
 } from "../src/index.js";
+import { PluginsLock } from "../src/pluginslock.js";
+import { RootsDaily } from "../src/roots.js";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const committed = join(root, "schemas");
-const paths = ["action/1.json", "config/1.json", "event/1.json", "log/1.json", "runflow/1.json"];
+const paths = [
+  "action/1.json",
+  "config/1.json",
+  "event/1.json",
+  "log/1.json",
+  "plugins-lock/1.json",
+  "roots/1.json",
+  "runflow/1.json",
+];
 
 type Json = { [key: string]: Json } | Json[] | string | number | boolean | null;
 
@@ -61,12 +71,14 @@ afterEach(() => {
 });
 
 describe("the frozen formats", () => {
-  it("are exactly the five phase 0 freezes, by versioned name", () => {
+  it("are the five phase 0 freezes and the two phase 1 freezes, by versioned name", () => {
     expect(formats()).toEqual({
       "action/1": Action,
       "config/1": Config,
       "event/1": Event,
       "log/1": Log,
+      "plugins-lock/1": PluginsLock,
+      "roots/1": RootsDaily,
       "runflow/1": Runflow,
     });
   });

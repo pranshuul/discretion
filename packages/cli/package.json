@@ -8,6 +8,7 @@
     "discretion": "./bin/discretion.js"
   },
   "dependencies": {
-    "@discretion/core": "workspace:*"
+    "@discretion/core": "workspace:*",
+    "@discretion/roots": "workspace:*"
   }
 }

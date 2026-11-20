@@ -3,6 +3,7 @@ import {
   accessSync,
   constants,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   writeFileSync,
@@ -36,10 +37,39 @@ function fresh(): string {
   return join(mkdtempSync(join(tmpdir(), "d1-ops-")), "vault");
 }
 
+/** A stand-in for the discretion CLI that has nothing to install and records its arguments. */
+function stubCli(dir: string, plan = ""): { path: string; log: string } {
+  const path = join(dir, "stub-cli.mjs");
+  const log = join(dir, "stub-cli.log");
+  const marker = join(dir, "stub-cli.done");
+  writeFileSync(
+    path,
+    `import { appendFileSync, existsSync, writeFileSync } from "node:fs";
+const args = process.argv.slice(2);
+appendFileSync(${JSON.stringify(log)}, args.join(" ") + "\n");
+const plan = ${JSON.stringify(plan)};
+if (args.includes("--dry-run")) {
+  console.log(plan && !existsSync(${JSON.stringify(marker)}) ? "would: " + plan : "nothing to do");
+} else {
+  writeFileSync(${JSON.stringify(marker)}, "");
+  console.log(plan);
+}
+`,
+  );
+  return { path, log };
+}
+
 function run(vault: string, ...flags: string[]) {
+  const dir = join(vault, "..");
+  mkdirSync(dir, { recursive: true });
+  const cli = stubCli(dir);
+  return runWith(vault, cli.path, ...flags);
+}
+
+function runWith(vault: string, cli: string, ...flags: string[]) {
   const result = spawnSync("bash", [script, "--vault", vault, ...flags], {
     encoding: "utf8",
-    env: { PATH: process.env.PATH, HOME: join(vault, "..", "home") },
+    env: { PATH: process.env.PATH, HOME: join(vault, "..", "home"), DISCRETION_CLI: cli },
   });
   return { status: result.status, out: result.stdout, err: result.stderr };
 }
@@ -116,5 +146,62 @@ describe("ops/d1.sh", () => {
 
   it("rejects an unknown flag", () => {
     expect(run(fresh(), "--nope").status).not.toBe(0);
+  });
+
+  it("runs the Roots install step through the CLI, dry-run first, and only when there is work", () => {
+    const vault = fresh();
+    const dir = join(vault, "..");
+    mkdirSync(dir, { recursive: true });
+    const cli = stubCli(dir, "write 1-Roots/Roots.md");
+    const first = runWith(vault, cli.path);
+    expect(first.status).toBe(0);
+    expect(first.out).toContain("write 1-Roots/Roots.md");
+    expect(readFileSync(cli.log, "utf8").trim().split("\n")).toEqual([
+      `roots install --vault ${vault} --dry-run`,
+      `roots install --vault ${vault}`,
+    ]);
+    const again = runWith(vault, cli.path);
+    expect(again.status).toBe(0);
+    expect(readFileSync(cli.log, "utf8").trim().split("\n")).toEqual([
+      `roots install --vault ${vault} --dry-run`,
+      `roots install --vault ${vault}`,
+      `roots install --vault ${vault} --dry-run`,
+    ]);
+    expect(again.out).toContain("nothing to do");
+  });
+
+  it("with --dry-run shows the Roots step's plan and never runs the real install", () => {
+    const vault = fresh();
+    const dir = join(vault, "..");
+    mkdirSync(dir, { recursive: true });
+    const cli = stubCli(dir, "write 1-Roots/Roots.md");
+    const { status, out } = runWith(vault, cli.path, "--dry-run");
+    expect(status).toBe(0);
+    expect(out).toContain("would: write 1-Roots/Roots.md");
+    expect(readFileSync(cli.log, "utf8").trim().split("\n")).toEqual([
+      `roots install --vault ${vault} --dry-run`,
+    ]);
+  });
+
+  it("fails when the Roots install fails", () => {
+    const vault = fresh();
+    const dir = join(vault, "..");
+    mkdirSync(dir, { recursive: true });
+    const broken = join(dir, "broken.mjs");
+    writeFileSync(
+      broken,
+      "if (!process.argv.includes('--dry-run')) process.exit(1);\nconsole.log('would: x');\n",
+    );
+    expect(runWith(vault, broken).status).not.toBe(0);
+  });
+
+  it("with the real CLI, --dry-run lists Roots' files and creates no vault", () => {
+    const vault = fresh();
+    const cli = fileURLToPath(new URL("../packages/cli/bin/discretion.js", import.meta.url));
+    const { status, out } = runWith(vault, cli, "--dry-run");
+    expect(status).toBe(0);
+    expect(out).toContain("would: write 1-Roots/Roots.md");
+    expect(out).toContain("would: write .discretion/plugins.lock.json");
+    expect(existsSync(vault)).toBe(false);
   });
 });

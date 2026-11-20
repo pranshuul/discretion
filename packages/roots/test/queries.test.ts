@@ -795,3 +795,175 @@ describe("Roots Home Today and Streaks", () => {
     expect(out).toEqual([{ kind: "paragraph", args: ["No habits stamped yet."] }]);
   });
 });
+
+describe("Roots delayed habits", () => {
+  const toml = [
+    "[habits.meds]",
+    'label = "Took morning meds"',
+    'kind = "check"',
+    'due = "09:00"',
+    'level = "hard"',
+    "",
+    "[habits.gym]",
+    'kind = "check"',
+    'window = ["18:00", "21:00"]',
+    "",
+    "[habits.read]",
+    'kind = "check"',
+    "",
+  ].join("\n");
+  const texts = { "3-Mycelium/config/habits.toml": toml };
+
+  const pages = [
+    daily("2026-11-02", {
+      habits: { meds: "done", gym: "skipped", read: "delayed" },
+      habitTimes: { meds: "09:00", read: "12:00" },
+      skipReasons: { gym: "travelling" },
+    }),
+    daily("2026-11-03", {
+      habits: { meds: "delayed", gym: "delayed", read: "done" },
+      habitTimes: { meds: "11:05", gym: "22:00" },
+    }),
+    daily("2026-11-04", {
+      habits: { meds: "delayed", gym: "done", read: "pending" },
+      habitTimes: { meds: "09:55" },
+    }),
+    daily("2026-11-05", {
+      habits: { meds: "delayed", gym: "done", read: "done" },
+      habitTimes: { meds: "09:20" },
+    }),
+    daily("2026-11-06", { habits: { meds: "done", gym: "missed", read: "done" } }),
+  ];
+
+  it("counts a delayed day in streaks and in completion", async () => {
+    const streak = await streakFn();
+    expect(streak(["done", "delayed", "done"], false)).toBe(3);
+    expect(streak(["delayed"], false)).toBe(1);
+    expect(streak(["done", "delayed", "pending"], true)).toBe(2);
+    expect(streak(["done", "delayed", "missed"], false)).toBe(0);
+  });
+
+  async function habitsTable(): Promise<{ rows: unknown[][]; header: unknown[] }> {
+    const { dv, out } = stubDv(
+      pages,
+      { kind: "weekly", from: "2026-11-02", to: "2026-11-08" },
+      "2026-11-07",
+      texts,
+    );
+    const d = design();
+    await run(
+      [querySnippet(d, "Preamble"), querySnippet(d, "Streak"), querySnippet(d, "Habits")].join(
+        "\n\n",
+      ),
+      { dv },
+    );
+    const table = out.find((o) => o.kind === "table");
+    return { header: table?.args[0] as unknown[], rows: table?.args[1] as unknown[][] };
+  }
+
+  it("Habits shows Done as completed over stamped with the on-time count", async () => {
+    const { rows } = await habitsTable();
+    const byId = Object.fromEntries(rows.map((r) => [r[0], r]));
+    expect(byId.meds?.[3]).toBe("5/5 (2 on time)");
+    expect(byId.meds?.[2]).toBe(5);
+    expect(byId.gym?.[3]).toBe("3/5 (2 on time)");
+    expect(byId.read?.[3]).toBe("4/5 (3 on time)");
+  });
+
+  it("Habits shows the median delay of time-bound habits on their delayed days", async () => {
+    const { header, rows } = await habitsTable();
+    expect(header[4]).toBe("Median delay");
+    const byId = Object.fromEntries(rows.map((r) => [r[0], r[4]]));
+    expect(byId.meds).toBe("55 min"); // delays of 125, 55 and 20 minutes
+    expect(byId.gym).toBe("1 h"); // 22:00 against the window's end at 21:00
+    expect(byId.read).toBe(""); // no due time or window, so no delay to measure
+  });
+
+  it("Habits colours a delayed day and says how late it was in the hover text", async () => {
+    const { rows } = await habitsTable();
+    const cells = Object.fromEntries(rows.map((r) => [r[0], r[1] as string]));
+    expect(cells.meds).toContain(
+      'class="roots-cell roots-delayed" title="Tue 3 Nov: done 11:05, 2 h late"',
+    );
+    expect(cells.meds).toContain('title="Wed 4 Nov: done 09:55, 55 min late"');
+    expect(cells.meds).toContain('class="roots-cell roots-done" title="Mon 2 Nov: done"');
+    expect(cells.gym).toContain('title="Tue 3 Nov: done 22:00, 1 h late"');
+    expect(cells.read).toContain('title="Mon 2 Nov: done 12:00, late"');
+  });
+
+  it("Habits shows a skip reason in the skipped cell's hover text", async () => {
+    const { rows } = await habitsTable();
+    const gym = rows.find((r) => r[0] === "gym")?.[1] as string;
+    expect(gym).toContain(
+      'class="roots-cell roots-skipped" title="Mon 2 Nov: skipped — travelling"',
+    );
+    expect(gym).toContain('class="roots-cell roots-missed" title="Fri 6 Nov: missed"');
+  });
+
+  it("without habits.toml a delayed day still shows, with no lateness to measure", async () => {
+    const { dv, out } = stubDv(
+      pages,
+      { kind: "weekly", from: "2026-11-02", to: "2026-11-08" },
+      "2026-11-07",
+    );
+    const d = design();
+    await run(
+      [querySnippet(d, "Preamble"), querySnippet(d, "Streak"), querySnippet(d, "Habits")].join(
+        "\n\n",
+      ),
+      { dv },
+    );
+    const rows = out.find((o) => o.kind === "table")?.args[1] as unknown[][];
+    const meds = rows.find((r) => r[0] === "meds") as unknown[];
+    expect(meds[4]).toBe("");
+    expect(meds[1]).toContain('title="Tue 3 Nov: done 11:05, late"');
+  });
+
+  const monthly = async (withToml: boolean) => {
+    const { dv, out } = stubDv(
+      [
+        daily("2026-11-02", { habits: { meds: "done" } }),
+        daily("2026-11-03", { habits: { meds: "delayed" }, habitTimes: { meds: "11:05" } }),
+        daily("2026-11-04", { habits: { meds: "missed" } }),
+      ],
+      { kind: "monthly", from: "2026-11-01", to: "2026-11-30" },
+      "2026-11-30",
+      withToml ? texts : {},
+    );
+    const d = design();
+    await run([querySnippet(d, "Preamble"), querySnippet(d, "Heatmap")].join("\n\n"), { dv });
+    return out;
+  };
+
+  it("Heatmap heading gives completion and on-time percentages and the median delay", async () => {
+    const out = await monthly(true);
+    expect(out.find((o) => o.kind === "header")?.args[1]).toBe(
+      "meds — 67% (33% on time), median delay 2 h",
+    );
+  });
+
+  it("Heatmap heading omits the median delay when the habit has no due time", async () => {
+    const out = await monthly(false);
+    expect(out.find((o) => o.kind === "header")?.args[1]).toBe("meds — 67% (33% on time)");
+  });
+
+  it("Heatmap colours a delayed day and its hover text says how late", async () => {
+    const out = await monthly(true);
+    const svg = out.find((o) => o.kind === "el")?.args[1] as string;
+    expect(svg).toContain(
+      'x="14" y="14" width="12" height="12" rx="2" class="roots-delayed"><title>3 Nov: done 11:05, 2 h late</title>',
+    );
+  });
+
+  it("Heatmap shows a skip reason in the skipped cell's hover text", async () => {
+    const { dv, out } = stubDv(
+      [daily("2026-11-02", { habits: { gym: "skipped" }, skipReasons: { gym: "travelling" } })],
+      { kind: "monthly", from: "2026-11-01", to: "2026-11-30" },
+      "2026-11-30",
+    );
+    const d = design();
+    await run([querySnippet(d, "Preamble"), querySnippet(d, "Heatmap")].join("\n\n"), { dv });
+    const svg = out.find((o) => o.kind === "el")?.args[1] as string;
+    expect(svg).toContain("<title>2 Nov: skipped — travelling</title>");
+  });
+});
