@@ -1,8 +1,7 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { shippedTemplate } from "../../roots/src/assets.js";
 import { install } from "../../roots/src/install.js";
 import { fakePins, startFakeGithub, type FakeGithub } from "../../roots/test/fake-github.js";
 import { run } from "../src/main.js";
@@ -38,7 +37,7 @@ async function cli(...argv: string[]): Promise<{ code: number; out: string; err:
 }
 
 const seeded = async (): Promise<void> => {
-  await install({ vault, githubBase: github.base, plugins: fakePins(), platform: "linux" });
+  await install({ vault, githubBase: github.base, plugins: fakePins() });
 };
 
 describe("discretion roots install", () => {
@@ -51,14 +50,13 @@ describe("discretion roots install", () => {
     expect(github.requests).toHaveLength(0);
   });
 
-  it("--json gives the changes and notices with sorted keys", async () => {
+  it("--json gives the changes with sorted keys", async () => {
     const { code, out } = await cli("roots", "install", "--vault", vault, "--dry-run", "--json");
     expect(code).toBe(0);
-    const parsed = JSON.parse(out) as { changes: string[]; dry_run: boolean; notices: string[] };
+    const parsed = JSON.parse(out) as { changes: string[]; dry_run: boolean };
     expect(parsed.dry_run).toBe(true);
     expect(parsed.changes.length).toBeGreaterThan(0);
-    expect(parsed.notices).toEqual([]);
-    expect(Object.keys(parsed)).toEqual(["changes", "dry_run", "notices"]);
+    expect(Object.keys(parsed)).toEqual(["changes", "dry_run"]);
   });
 
   it("refuses on a hash mismatch with D2010, a remedy line and exit 1", async () => {
@@ -102,59 +100,21 @@ describe("discretion roots status", () => {
   it("--json lists the items", async () => {
     await seeded();
     const { out } = await cli("roots", "status", "--vault", vault, "--json");
-    const parsed = JSON.parse(out) as { items: { kind: string; severity: string }[] };
+    const parsed = JSON.parse(out) as { items: { kind: string; name: string; message: string }[] };
     // The fake plugins do not match the real pins, so they show up as drift.
-    expect(parsed.items.some((i) => i.kind === "plugin" && i.severity === "drift")).toBe(true);
+    expect(parsed.items.some((i) => i.kind === "plugin")).toBe(true);
   });
 
-  it("shows an edited template as modified", async () => {
+  it("does not list an edited template", async () => {
     await seeded();
     writeFileSync(join(vault, "1-Roots/_roots/templates/daily.md"), "mine\n");
     const { out } = await cli("roots", "status", "--vault", vault);
-    expect(out).toContain("modified");
-    expect(out).toContain("template daily");
-    expect(out).toContain("differs from the shipped default");
-  });
-});
-
-describe("discretion roots template", () => {
-  beforeEach(seeded);
-
-  it("diff prints the difference from the shipped default", async () => {
-    writeFileSync(join(vault, "1-Roots/_roots/templates/weekly.md"), "mine\n");
-    const { code, out } = await cli("roots", "template", "diff", "weekly", "--vault", vault);
-    expect(code).toBe(0);
-    expect(out).toContain("--- shipped weekly.md");
-    expect(out).toContain("+mine");
+    expect(out).not.toContain("template daily");
+    expect(out).not.toContain("modified");
   });
 
-  it("diff says so when the template is the default", async () => {
-    const { code, out } = await cli("roots", "template", "diff", "daily", "--vault", vault);
-    expect(code).toBe(0);
-    expect(out).toBe("daily.md is the shipped default\n");
-  });
-
-  it("reset restores the default, and --dry-run only says so", async () => {
-    const file = join(vault, "1-Roots/_roots/templates/daily.md");
-    writeFileSync(file, "mine\n");
-    const dry = await cli("roots", "template", "reset", "daily", "--vault", vault, "--dry-run");
-    expect(dry.out).toBe("would: reset daily.md to the shipped default\n");
-    expect(readFileSync(file, "utf8")).toBe("mine\n");
-    const real = await cli("roots", "template", "reset", "daily", "--vault", vault);
-    expect(real.code).toBe(0);
-    expect(real.out).toBe("reset daily.md to the shipped default\n");
-    expect(readFileSync(file, "utf8")).toBe(shippedTemplate("daily"));
-  });
-
-  it("reset --json reports whether anything changed", async () => {
-    const { out } = await cli("roots", "template", "reset", "daily", "--vault", vault, "--json");
-    expect(JSON.parse(out)).toEqual({ changed: false, dry_run: false, template: "daily" });
-  });
-
-  it("refuses a template that does not exist with exit 2", async () => {
-    const { code, err } = await cli("roots", "template", "diff", "nope", "--vault", vault);
-    expect(code).toBe(2);
-    expect(err).toContain("Usage: discretion roots template");
+  it("has no --dry-run: it prints usage and exits 2", async () => {
+    expect((await cli("roots", "status", "--vault", vault, "--dry-run")).code).toBe(2);
   });
 });
 
@@ -164,5 +124,7 @@ describe("discretion roots", () => {
     const unknown = await cli("roots", "frobnicate");
     expect(unknown.code).toBe(2);
     expect(unknown.err).toContain("Usage: discretion roots");
+    expect(unknown.err).not.toContain("template");
+    expect((await cli("roots", "template", "diff", "daily")).code).toBe(2);
   });
 });

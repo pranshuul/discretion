@@ -57,8 +57,7 @@ describe("Roots DESIGN.md", () => {
       "Wheel of Life",
       "Colours",
       "One renderer",
-      "Customizing Roots",
-      "Repairing a note",
+      "Templates",
       "Marker rules",
       "Privacy spans",
       "Question list",
@@ -248,15 +247,15 @@ describe("Roots DESIGN.md", () => {
   });
 });
 
-describe("Roots DESIGN.md: editable templates, repair, habits and delays", () => {
+describe("Roots DESIGN.md: templates, habits and delays", () => {
   it("lists the templates as real Markdown files with the fixed placeholders", () => {
     const d = design();
     const paths = section(d, "Notes and paths");
     expect(paths).toContain("templates/{daily,weekly,monthly,quarterly,yearly,home}.md");
-    expect(paths).toContain("today.md");
-    expect(paths).toContain("repair.md");
+    expect(paths).not.toContain("today.md");
+    expect(paths).not.toContain("repair.md");
     expect(paths).not.toContain("one line each");
-    const custom = section(d, "Customizing Roots");
+    const custom = section(d, "Templates");
     for (const p of [
       "{{title}}",
       "{{links}}",
@@ -286,7 +285,7 @@ describe("Roots DESIGN.md: editable templates, repair, habits and delays", () =>
   });
 
   it("says nothing depends on position or headings and what happens to an unknown placeholder", () => {
-    const custom = section(design(), "Customizing Roots");
+    const custom = section(design(), "Templates");
     expect(custom).toMatch(/marker pair/);
     expect(custom).toMatch(/skips that note/);
     expect(custom).toMatch(/discretion doctor/);
@@ -294,39 +293,35 @@ describe("Roots DESIGN.md: editable templates, repair, habits and delays", () =>
     expect(custom).toMatch(/never re-rendered/);
   });
 
-  it("describes defaults, status, diff and reset, and File recovery", () => {
-    const custom = section(design(), "Customizing Roots");
-    expect(custom).toMatch(/never overwrites an edited/);
-    expect(custom).toContain("discretion roots status");
-    expect(custom).toContain("discretion roots template diff <kind>");
-    expect(custom).toContain("discretion roots template reset <kind>");
-    expect(custom).toContain("discretion roots history <note>");
-    expect(custom).toContain("discretion roots restore <note> <commit>");
-    expect(custom).toContain("File recovery");
+  it("describes defaults and status, and defines no commands beyond install and status", () => {
+    const d = design();
+    const templates = section(d, "Templates");
+    expect(templates).toMatch(/never overwrites an edited/);
+    expect(templates).toContain("discretion roots status");
+    for (const gone of [
+      "template diff",
+      "template reset",
+      "roots history",
+      "roots restore",
+      "roots repair",
+      "File recovery",
+      "hotkey",
+      "Ctrl+Alt",
+      "Cmd+Option",
+      "repair.md",
+      "today.md",
+      "Repairing a note",
+      "Customizing Roots",
+    ]) {
+      expect(d.toLowerCase(), gone).not.toContain(gone.toLowerCase());
+    }
   });
 
-  it("describes repair, its command, its hotkey and the Recovered section", () => {
-    const repair = section(design(), "Repairing a note");
-    expect(repair).toContain("discretion roots repair <note-or-date> [--dry-run]");
-    expect(repair).toContain("_roots/templates/repair.md");
-    expect(repair).toContain("Ctrl+Alt+R");
-    expect(repair).toContain("Cmd+Option+R");
-    expect(repair).toContain("Templater: Insert 1-Roots/_roots/templates/repair.md");
-    expect(repair).toContain("## Recovered");
-    expect(repair).toContain("<!-- roots:quick-notes:end -->");
-    expect(repair).toMatch(/Apply/);
-    expect(repair).toMatch(/commits the vault before and after/);
-    const custom = section(design(), "One renderer");
-    expect(custom).toContain("today.md");
-    expect(custom).toContain("Ctrl+Alt+T");
-  });
-
-  it("lists the settings install also writes: File recovery on and the two hotkeys", () => {
+  it("lists the settings install writes and no others", () => {
     const plugins = section(design(), "Plugins");
-    expect(plugins).toContain("File recovery");
-    expect(plugins).toContain("Template hotkeys");
-    expect(plugins).toContain("Ctrl+Alt+R");
     expect(plugins).toContain("community-plugins.json");
+    expect(plugins).toContain("Daily notes plugin off");
+    expect(plugins).toContain("user-script folder");
   });
 
   it("frontmatter has the five habit states and habitTimes", () => {

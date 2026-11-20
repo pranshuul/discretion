@@ -69,7 +69,7 @@ const placeholders = (text: string): string[] =>
   [...text.matchAll(/\{\{([^{}]+)\}\}/g)].map((m) => m[1] ?? "");
 
 describe("the default templates", () => {
-  it("are eight files: six note kinds and the today and repair launchers", () => {
+  it("are the six note kinds", () => {
     expect([...templateNames]).toEqual([
       "daily",
       "weekly",
@@ -77,14 +77,7 @@ describe("the default templates", () => {
       "quarterly",
       "yearly",
       "home",
-      "today",
-      "repair",
     ]);
-  });
-
-  it("launchers are one line calling the shared renderer", () => {
-    expect(shippedTemplate("today")).toBe("<% await tp.user.roots(tp) %>\n");
-    expect(shippedTemplate("repair")).toBe("<% await tp.user.roots(tp) %>\n");
   });
 
   it.each(noteKinds)("%s has the sections DESIGN.md lists, top to bottom", (kind) => {

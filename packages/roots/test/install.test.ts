@@ -33,7 +33,7 @@ function vaultDir(): string {
 }
 
 const run = (vault: string, extra: Record<string, unknown> = {}) =>
-  install({ vault, githubBase: github.base, plugins: fakePins(), platform: "linux", ...extra });
+  install({ vault, githubBase: github.base, plugins: fakePins(), ...extra });
 
 const read = (vault: string, path: string): string => readFileSync(join(vault, path), "utf8");
 const json = (vault: string, path: string): Record<string, unknown> =>
@@ -89,13 +89,11 @@ describe("roots install", () => {
     const templater = json(vault, ".obsidian/plugins/templater-obsidian/data.json");
     expect(templater.templates_folder).toBe("1-Roots/_roots/templates");
     expect(templater.user_scripts_folder).toBe("1-Roots/_roots/scripts");
-    expect(templater.enabled_templates_hotkeys).toEqual([
-      "1-Roots/_roots/templates/repair.md",
-      "1-Roots/_roots/templates/today.md",
-    ]);
+    expect(templater.enabled_templates_hotkeys).toBeUndefined();
     const core = json(vault, ".obsidian/core-plugins.json");
     expect(core["daily-notes"]).toBe(false);
-    expect(core["file-recovery"]).toBe(true);
+    expect(core["file-recovery"]).toBeUndefined();
+    expect(existsSync(join(vault, ".obsidian/hotkeys.json"))).toBe(false);
     expect(json(vault, ".obsidian/appearance.json").enabledCssSnippets).toEqual(["roots"]);
     const dataview = json(vault, ".obsidian/plugins/dataview/data.json");
     expect(dataview.enableDataviewJs).toBe(true);
@@ -103,28 +101,6 @@ describe("roots install", () => {
     expect(
       (JSON.parse(read(vault, ".obsidian/community-plugins.json")) as string[]).sort(),
     ).toEqual(["dataview", "obsidian-meta-bind-plugin", "templater-obsidian"]);
-  });
-
-  it("binds Ctrl+Alt+R to repair and Ctrl+Alt+T to today on Linux", async () => {
-    const vault = vaultDir();
-    await run(vault);
-    expect(json(vault, ".obsidian/hotkeys.json")).toEqual({
-      "templater-obsidian:1-Roots/_roots/templates/repair.md": [
-        { modifiers: ["Alt", "Ctrl"], key: "R" },
-      ],
-      "templater-obsidian:1-Roots/_roots/templates/today.md": [
-        { modifiers: ["Alt", "Ctrl"], key: "T" },
-      ],
-    });
-  });
-
-  it("binds Cmd+Option on macOS", async () => {
-    const vault = vaultDir();
-    await run(vault, { platform: "darwin" });
-    const keys = json(vault, ".obsidian/hotkeys.json") as Record<string, { modifiers: string[] }[]>;
-    for (const binding of Object.values(keys)) {
-      expect(binding[0]?.modifiers).toEqual(["Alt", "Meta"]);
-    }
   });
 
   it("downloads each plugin's files into .obsidian/plugins/<id>/ and locks them", async () => {
@@ -183,12 +159,12 @@ describe("roots install", () => {
     expect(read(vault, "note.md")).toBe("mine");
   });
 
-  it("refuses with a typed error when a download fails, and writes nothing", async () => {
+  it("refuses with D2010 when a download fails, and writes nothing", async () => {
     const vault = vaultDir();
     github.missing.add("/mProjectsCode/obsidian-meta-bind-plugin/releases/download/1.5.1/main.js");
     const error = (await run(vault).catch((e: unknown) => e)) as DiscretionError;
     expect(error).toBeInstanceOf(DiscretionError);
-    expect(error.code).toBe("D2011");
+    expect(error.code).toBe("D2010");
     expect(error.message).toContain("obsidian-meta-bind-plugin");
     expect(existsSync(vault)).toBe(false);
   });
@@ -199,7 +175,7 @@ describe("roots install", () => {
     expect(first.changes.length).toBeGreaterThan(0);
     const before = github.requests.length;
     const second = await run(vault);
-    expect(second).toEqual({ changes: [], notices: [] });
+    expect(second).toEqual({ changes: [] });
     expect(github.requests).toHaveLength(before);
   });
 
@@ -257,16 +233,10 @@ describe("roots install", () => {
       ".obsidian/plugins/templater-obsidian/data.json",
       `{"trigger_on_file_creation":true}`,
     );
-    put(
-      vault,
-      ".obsidian/hotkeys.json",
-      `{"editor:toggle-bold":[{"modifiers":["Mod"],"key":"B"}]}`,
-    );
     await run(vault);
     expect(json(vault, ".obsidian/core-plugins.json")).toEqual({
       "daily-notes": false,
       "file-explorer": true,
-      "file-recovery": true,
     });
     expect(json(vault, ".obsidian/community-plugins.json")).toEqual([
       "calendar",
@@ -287,49 +257,13 @@ describe("roots install", () => {
       trigger_on_file_creation: true,
       templates_folder: "1-Roots/_roots/templates",
     });
-    expect(json(vault, ".obsidian/hotkeys.json")["editor:toggle-bold"]).toEqual([
-      { modifiers: ["Mod"], key: "B" },
-    ]);
   });
 
   it("handles core-plugins.json written as a list of enabled plugins", async () => {
     const vault = vaultDir();
     put(vault, ".obsidian/core-plugins.json", `["file-explorer","daily-notes"]`);
     await run(vault);
-    expect(json(vault, ".obsidian/core-plugins.json")).toEqual(["file-explorer", "file-recovery"]);
-  });
-
-  it("does not take a hotkey that is already bound, and says so", async () => {
-    const vault = vaultDir();
-    put(
-      vault,
-      ".obsidian/hotkeys.json",
-      `{"app:go-back":[{"modifiers":["Alt","Ctrl"],"key":"R"}]}`,
-    );
-    const result = await run(vault);
-    const keys = json(vault, ".obsidian/hotkeys.json");
-    expect(keys["templater-obsidian:1-Roots/_roots/templates/repair.md"]).toBeUndefined();
-    expect(keys["templater-obsidian:1-Roots/_roots/templates/today.md"]).toEqual([
-      { modifiers: ["Alt", "Ctrl"], key: "T" },
-    ]);
-    expect(result.notices).toHaveLength(1);
-    expect(result.notices[0]).toContain("Ctrl+Alt+R");
-    expect(result.notices[0]).toContain("repair");
-    const templater = json(vault, ".obsidian/plugins/templater-obsidian/data.json");
-    expect(templater.enabled_templates_hotkeys).toContain("1-Roots/_roots/templates/repair.md");
-  });
-
-  it("keeps a hotkey Pranshul rebound and does not nag about it", async () => {
-    const vault = vaultDir();
-    await run(vault);
-    const keys = json(vault, ".obsidian/hotkeys.json");
-    keys["templater-obsidian:1-Roots/_roots/templates/repair.md"] = [
-      { modifiers: ["Mod"], key: "J" },
-    ];
-    put(vault, ".obsidian/hotkeys.json", JSON.stringify(keys));
-    const again = await run(vault);
-    expect(again).toEqual({ changes: [], notices: [] });
-    expect(json(vault, ".obsidian/hotkeys.json")).toEqual(keys);
+    expect(json(vault, ".obsidian/core-plugins.json")).toEqual(["file-explorer"]);
   });
 
   it("re-downloads a plugin file that no longer matches its pin, and re-locks", async () => {
@@ -368,7 +302,6 @@ describe("roots install", () => {
       "templater-obsidian",
       "obsidian-meta-bind-plugin",
       "core-plugins.json",
-      "hotkeys.json",
       "plugins.lock.json",
     ]) {
       expect(text, part).toContain(part);
@@ -378,7 +311,7 @@ describe("roots install", () => {
   it("dryRun on an installed vault reports nothing", async () => {
     const vault = vaultDir();
     await run(vault);
-    expect(await run(vault, { dryRun: true })).toEqual({ changes: [], notices: [] });
+    expect(await run(vault, { dryRun: true })).toEqual({ changes: [] });
   });
 
   it("downloads from github.com unless told otherwise", async () => {
@@ -388,7 +321,7 @@ describe("roots install", () => {
       urls.push(url);
       return Promise.resolve(new Response("x", { status: 200 }));
     }) as unknown as typeof fetch;
-    await install({ vault, fetch: stub, platform: "linux" }).catch(() => undefined);
+    await install({ vault, fetch: stub }).catch(() => undefined);
     expect(urls[0]).toMatch(
       /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\/[^/]+\/[^/]+$/,
     );

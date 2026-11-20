@@ -23,7 +23,7 @@ afterEach(async () => {
 });
 
 const installed = async (): Promise<void> => {
-  await install({ vault, githubBase: github.base, plugins: fakePins(), platform: "linux" });
+  await install({ vault, githubBase: github.base, plugins: fakePins() });
 };
 const check = (): Promise<StatusItem[]> => status({ vault, plugins: fakePins() });
 const put = (path: string, text: string): void => {
@@ -42,7 +42,6 @@ describe("roots status", () => {
   it("reports an uninstalled vault as drift", async () => {
     const items = await check();
     expect(items.length).toBeGreaterThan(0);
-    expect(items.every((i) => i.severity === "drift")).toBe(true);
     expect(find(items, "lock", "plugins.lock.json")).toBeDefined();
   });
 
@@ -50,7 +49,6 @@ describe("roots status", () => {
     await installed();
     put(".obsidian/plugins/dataview/main.js", "tampered");
     const item = find(await check(), "plugin", "dataview/main.js");
-    expect(item?.severity).toBe("drift");
     expect(item?.message).toContain("SHA-256");
   });
 
@@ -58,7 +56,6 @@ describe("roots status", () => {
     await installed();
     rmSync(join(vault, ".obsidian/plugins/templater-obsidian/styles.css"));
     const item = find(await check(), "plugin", "templater-obsidian/styles.css");
-    expect(item?.severity).toBe("drift");
     expect(item?.message).toContain("missing");
   });
 
@@ -67,7 +64,6 @@ describe("roots status", () => {
     const pins = fakePins().map((p) => (p.id === "dataview" ? { ...p, version: "0.5.69" } : p));
     const items = await status({ vault, plugins: pins });
     const item = find(items, "lock", "dataview");
-    expect(item?.severity).toBe("drift");
     expect(item?.message).toContain("0.5.68");
     expect(item?.message).toContain("0.5.69");
   });
@@ -79,7 +75,6 @@ describe("roots status", () => {
     ) as { plugins: { files: Record<string, string> }[] };
     (lock.plugins[0] as { files: Record<string, string> }).files["main.js"] = "0".repeat(64);
     put(".discretion/plugins.lock.json", JSON.stringify(lock));
-    expect(find(await check(), "lock", "dataview")?.severity).toBe("drift");
   });
 
   it("flags a setting Roots needs that was changed", async () => {
@@ -88,7 +83,7 @@ describe("roots status", () => {
       ".obsidian/plugins/templater-obsidian/data.json",
       `{"templates_folder":"Templates","user_scripts_folder":"1-Roots/_roots/scripts"}`,
     );
-    put(".obsidian/core-plugins.json", `{"daily-notes":true,"file-recovery":true}`);
+    put(".obsidian/core-plugins.json", `{"daily-notes":true}`);
     put(".obsidian/appearance.json", `{"enabledCssSnippets":[]}`);
     put(".obsidian/plugins/dataview/data.json", `{"enableDataviewJs":false}`);
     const items = await check();
@@ -98,36 +93,33 @@ describe("roots status", () => {
       "roots CSS snippet",
       "Dataview JavaScript queries",
     ]) {
-      expect(find(items, "setting", name)?.severity, name).toBe("drift");
+      expect(find(items, "setting", name), name).toBeDefined();
     }
   });
 
-  it("lists a template that differs from the shipped default as modified, not drift", async () => {
+  it("does not list a template, questions.md or roots.css that was edited on purpose", async () => {
     await installed();
     put("1-Roots/_roots/templates/daily.md", "{{frontmatter}}\n\n# {{title}}\n");
-    const items = await check();
-    expect(items).toEqual([
-      {
-        kind: "template",
-        name: "daily",
-        severity: "modified",
-        message: expect.stringContaining("differs from the shipped default") as string,
-      },
-    ]);
+    put("1-Roots/_roots/questions.md", "# mine\n");
+    put("1-Roots/_roots/roots.css", "body {}\n");
+    put(".obsidian/snippets/roots.css", "body {}\n");
+    expect(await check()).toEqual([]);
   });
 
-  it("lists a missing template as drift", async () => {
+  it("lists a missing template, questions.md or Roots.md", async () => {
     await installed();
     rmSync(join(vault, "1-Roots/_roots/templates/weekly.md"));
-    expect(find(await check(), "template", "weekly")?.severity).toBe("drift");
+    rmSync(join(vault, "1-Roots/_roots/questions.md"));
+    rmSync(join(vault, "1-Roots/Roots.md"));
+    const items = await check();
+    expect(find(items, "template", "weekly")?.message).toContain("missing");
+    expect(find(items, "file", "questions.md")?.message).toContain("missing");
+    expect(find(items, "file", "Roots.md")?.message).toContain("missing");
   });
 
-  it("lists an edited questions.md and roots.css as modified, and a missing one as drift", async () => {
+  it("lists a roots.css snippet copy that differs from _roots/roots.css", async () => {
     await installed();
-    put("1-Roots/_roots/questions.md", "# mine\n");
-    rmSync(join(vault, "1-Roots/_roots/roots.css"));
-    const items = await check();
-    expect(find(items, "file", "questions.md")?.severity).toBe("modified");
-    expect(find(items, "file", "roots.css")?.severity).toBe("drift");
+    put(".obsidian/snippets/roots.css", "body {}\n");
+    expect(find(await check(), "file", "roots.css snippet copy")).toBeDefined();
   });
 });
