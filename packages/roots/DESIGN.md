@@ -21,13 +21,15 @@ All paths are under `1-Roots/`. Dates are the local calendar date, weeks are ISO
 
 ```
 _roots/
-  templates/{daily,weekly,monthly,quarterly,yearly,home}.md   one line each: <% await tp.user.roots(tp) %>
+  templates/{daily,weekly,monthly,quarterly,yearly,home}.md   each note kind's template, a real Markdown file
+  templates/today.md          launcher: <% await tp.user.roots(tp) %>
+  templates/repair.md         launcher: <% await tp.user.roots(tp) %>
   scripts/roots.js            the renderer bundle (CommonJS), loaded by Templater as a user script
   questions.md                the 366 prompts of the Question list, one per day of the year
   roots.css                   the CSS snippet defined under Colours
 ```
 
-`roots.js` receives the template's kind from the file it was run from (`daily.md` gives `daily`), and the date from the note being created, which is today unless the command names another date.
+The six note templates hold each note as this file defines it, with the placeholders listed under Customizing Roots; Pranshul edits them in Obsidian. `today.md` and `repair.md` are the two Templater launchers, a single line apiece. `roots.js` receives the launcher's name from the file it was run from (`today.md` creates today's daily note, `repair.md` repairs the open note), and the date from the note being created, which is today unless the command names another date.
 
 ## Plugins
 
@@ -37,7 +39,9 @@ _roots/
 | Dataview  | Every rollup, list, chart and heatmap (DQL and `dataviewjs`)                   |
 | Meta Bind | The rating slider, alias input, weekly wheel sliders, habit inputs and buttons |
 
-`discretion roots install` downloads each plugin from its official GitHub release at a pinned version, checks the SHA-256 of every file, and records the result in `~/vault/.discretion/plugins.lock.json`. It refuses on a hash mismatch (D2010). `discretion doctor` and `discretion roots status` flag drift. The `.obsidian` settings Roots needs are: Templater's template folder `1-Roots/_roots/templates` and user-script folder `1-Roots/_roots/scripts`, the core Daily notes plugin off, and the `roots` CSS snippet on.
+`discretion roots install` downloads each plugin from its official GitHub release at a pinned version, checks the SHA-256 of every file, and records the result in `~/vault/.discretion/plugins.lock.json`. It refuses on a hash mismatch (D2010). `discretion doctor` and `discretion roots status` flag drift. The `.obsidian` settings Roots needs are: Templater's template folder `1-Roots/_roots/templates` and user-script folder `1-Roots/_roots/scripts`, the core Daily notes plugin off, the core File recovery plugin on (it snapshots notes every few minutes, one of the safety nets under Customizing Roots), the `roots` CSS snippet on (install copies `_roots/roots.css` to `.obsidian/snippets/roots.css`, the only folder Obsidian reads snippets from), and the three plugins listed in `community-plugins.json` so Obsidian loads them. Install merges these into the files that are already there and keeps every other key.
+
+Roots has no Obsidian plugin of its own, so its two commands are Templater templates. Install lists `_roots/templates/repair.md` and `_roots/templates/today.md` under Templater's "Template hotkeys" (`enabled_templates_hotkeys`), which makes them appear in the command palette as "Templater: Insert 1-Roots/_roots/templates/repair.md" and "Templater: Insert 1-Roots/_roots/templates/today.md", and binds Ctrl+Alt+R and Ctrl+Alt+T to them (Cmd+Option+R and Cmd+Option+T on macOS) in `.obsidian/hotkeys.json`. A key that another command already holds is left alone: install says which one it did not bind, and the command stays in the palette. A binding Pranshul changes afterwards is kept.
 
 The charts are `dataviewjs` blocks, so Roots also needs Dataview's JavaScript queries, a required setting the plan's install step must write too: `discretion roots install` writes Dataview's settings file, `.obsidian/plugins/dataview/data.json`, with `enableDataviewJs: true` and `enableInlineDataviewJs: true`, alongside the settings above. Other Dataview settings keep their defaults.
 
@@ -57,13 +61,14 @@ aiRating:
 aiAlias:
 discretion: 1
 habits: {}
+habitTimes: {}
 habitMinutes: {}
 habitSource: {}
 skipReasons: {}
 ---
 ```
 
-`roots` is the schema marker, `date` the note's date, `rating` an integer 1–10 that stays empty until set, `alias` a few words naming the day, `aiRating` and `aiAlias` the local model's nightly suggestions. The keys from `discretion: 1` down are the `roots/1` keys Discretion owns: `habits` maps habit id to `pending`, `done`, `skipped` or `missed`; `habitMinutes` maps quantity-habit ids to minutes; `habitSource` maps them to `timed` or `self-reported`; `skipReasons` maps habit ids to the reason given when skipped. The first five keys above are written empty; the renderer never writes a value Pranshul or the AI should supply.
+`roots` is the schema marker, `date` the note's date, `rating` an integer 1–10 that stays empty until set, `alias` a few words naming the day, `aiRating` and `aiAlias` the local model's nightly suggestions. The keys from `discretion: 1` down are the `roots/1` keys Discretion owns: `habits` maps habit id to `pending`, `done`, `delayed`, `skipped` or `missed` (`delayed` is done, but after the habit's `due` or window end plus its `late_after_min`); `habitTimes` maps a check habit's id to the local `HH:MM` it was marked done, from which `done` and `delayed` follow (a habit with neither `due` nor window never becomes `delayed`); `habitMinutes` maps quantity-habit ids to minutes; `habitSource` maps them to `timed` or `self-reported`; `skipReasons` maps habit ids to the reason given when skipped. The first five keys above are written empty; the renderer never writes a value Pranshul or the AI should supply.
 
 ### 2. Title and links
 
@@ -100,7 +105,21 @@ Free writing, Pranshul's own. The section is empty when created.
 <!-- discretion:habits:end -->
 ```
 
-The habit stamper writes one line per habit due that day between the markers. A check habit is `- Took morning meds INPUT[inlineSelect(option(pending), option(done), option(skipped), option(missed)):habits.meds-morning]`; a quantity habit is `- Build or study for 3 hours INPUT[number:habitMinutes.deep-work]`. A tap in Obsidian and a tap in Telegram change the same frontmatter key, so recaps read one source. The renderer writes the empty marker pair only.
+The habit stamper writes one line per habit due that day between the markers. A check habit with no time is `- Gym INPUT[inlineSelect(option(pending), option(done), option(skipped), option(missed)):habits.gym]`. A time-bound check habit, one with a `due` time or a window, adds the `delayed` option and a time input for when it was done:
+
+```markdown
+- Took morning meds INPUT[inlineSelect(option(pending), option(done), option(delayed), option(skipped), option(missed)):habits.meds-morning] at INPUT[time:habitTimes.meds-morning]
+```
+
+Untimed check habits omit the time input. A quantity habit is `- Build or study for 3 hours INPUT[number:habitMinutes.deep-work]` and has neither the reason input nor the time input.
+
+The "why skipped?" input appears only on a skipped habit's line. Meta Bind cannot show an input conditionally, so Discretion rewrites that one line inside the `habits` markers whenever the habit's state becomes `skipped` (a Telegram tap, a `habit-report` capture, or a mark made in Obsidian and noticed by the laptop's file watcher), adding `INPUT[text(placeholder(why skipped?)):skipReasons.gym]` after the select, and removes it again when the state changes away from `skipped`:
+
+```markdown
+- Gym INPUT[inlineSelect(option(pending), option(done), option(skipped), option(missed)):habits.gym] INPUT[text(placeholder(why skipped?)):skipReasons.gym]
+```
+
+The rewrite touches only that habit's line, keeps the select's value and does nothing if the markers are missing. The reason stays in `skipReasons` either way; recaps show it in the hover text of that habit's skipped cell, and it is private (never sent to frontier models). A tap in Obsidian and a tap in Telegram change the same frontmatter key, so recaps read one source. The renderer writes the empty marker pair only.
 
 ### 6. Today's plan
 
@@ -242,7 +261,7 @@ One line per day with its alias and rating, linked to the daily note (the Days q
 
 ### Habits
 
-A habit-by-day grid with each habit's streak and its completion count (the Habits query).
+A habit-by-day grid with each habit's streak, its completion count and, for time-bound habits, the median delay on delayed days (the Habits query). Done reads `6/7 (5 on time)` when some days were delayed.
 
 ### Wheel of Life
 
@@ -280,7 +299,7 @@ Three prompts, with room under each for Pranshul's answer.
 
 ## Monthly note
 
-Frontmatter: `roots: 1`, `kind: monthly`, `from`, `to` (first and last day of the month); there is no `wheel` key. Title `# November 2026`, with links to the previous and next month and the year. The sections are the same seven as the weekly note and in the same order, over the month's days, with these differences. Ratings shows the rating trend (the Ratings query's `trend` mode, one point per day) instead of a bar per day. Habits shows a calendar heatmap per habit and its completion percentage instead of the grid (the Heatmap query). Wheel of Life has no inputs: it shows each area's value per week, computed from the weekly notes (the Wheel progression query). The Reflection prompts say "month" for "week".
+Frontmatter: `roots: 1`, `kind: monthly`, `from`, `to` (first and last day of the month); there is no `wheel` key. Title `# November 2026`, with links to the previous and next month and the year. The sections are the same seven as the weekly note and in the same order, over the month's days, with these differences. Ratings shows the rating trend (the Ratings query's `trend` mode, one point per day) instead of a bar per day. Habits shows a calendar heatmap per habit with its completion percentage, and its on-time percentage and median delay when some days were delayed, instead of the grid (the Heatmap query). Wheel of Life has no inputs: it shows each area's value per week, computed from the weekly notes (the Wheel progression query). The Reflection prompts say "month" for "week".
 
 ### Ratings
 
@@ -384,7 +403,7 @@ The Summary of each quarterly note in the year, in date order.
 
 ## Home note
 
-`Roots.md` is created once, at install, and never rendered again, so everything that depends on the date is a query that runs when the note is opened. Frontmatter is `roots: 1` and `kind: home`. Top to bottom, each part after the title under a `##` heading of the same name:
+`Roots.md` is created once, at install, from `_roots/templates/home.md` (an edited home template is used as it stands), and never rendered again, so everything that depends on the date is a query that runs when the note is opened. Frontmatter is `roots: 1` and `kind: home`. Top to bottom, each part after the title under a `##` heading of the same name:
 
 1. `# Roots`.
 2. **Today**: links to today's note and this week's note, then today's alias, rating and the state of each habit. One block: Home preamble with `range` `"today"`, then the Today body.
@@ -473,17 +492,19 @@ Home has no buttons. The recap notes have none.
 
 Every query in a note is one `dataviewjs` block that the renderer assembles from the snippets below, joined by a blank line: a preamble first (Preamble in recap notes, Home preamble in `Roots.md`), then the helpers the body calls (Rating chart, Streak), then the body. Which blocks each note holds is listed under its note kind; the table gives each body's helpers.
 
-| Body              | Helpers      | Used in                                        |
-| ----------------- | ------------ | ---------------------------------------------- |
-| Ratings           | Rating chart | Every recap; Home's This week and 30-day trend |
-| Logs              | —            | Every recap                                    |
-| Days              | —            | Every recap                                    |
-| Habits            | Streak       | Weekly                                         |
-| Heatmap           | —            | Monthly, quarterly, yearly                     |
-| Wheel progression | —            | Monthly, quarterly, yearly                     |
-| Notes below       | —            | Quarterly, yearly                              |
-| Today             | —            | Home                                           |
-| Streaks           | Streak       | Home                                           |
+| Body              | Helpers      | Used in                                        | Placeholder                                                                                        |
+| ----------------- | ------------ | ---------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Ratings           | Rating chart | Every recap; Home's This week and 30-day trend | `{{query:ratings-bars}}`, `{{query:ratings-trend}}`, `{{query:home-week}}`, `{{query:home-trend}}` |
+| Logs              | —            | Every recap                                    | `{{query:logs}}`                                                                                   |
+| Days              | —            | Every recap                                    | `{{query:days}}`                                                                                   |
+| Habits            | Streak       | Weekly                                         | `{{query:habits}}`                                                                                 |
+| Heatmap           | —            | Monthly, quarterly, yearly                     | `{{query:heatmap}}`                                                                                |
+| Wheel progression | —            | Monthly, quarterly, yearly                     | `{{query:wheel-progression}}`                                                                      |
+| Notes below       | —            | Quarterly, yearly                              | `{{query:notes-below}}`                                                                            |
+| Today             | —            | Home                                           | `{{query:home-today}}`                                                                             |
+| Streaks           | Streak       | Home                                           | `{{query:home-streaks}}`                                                                           |
+
+Ratings in monthly, quarterly and yearly notes and in Home's 30-day trend is the Ratings body with `mode` set to `"trend"`; Home's four blocks use the Home preamble with `range` set to `"today"`, `"week"`, `"all"` and `"30 days"`, in the order of the Home note's parts.
 
 Days are the daily notes whose `date` lies in the range, oldest first. Dataview reads `date`, `from` and `to` as dates.
 
@@ -625,14 +646,14 @@ dv.table(
 
 ### Streak
 
-`streak(states, openLast)` counts a habit's current streak from its state on each day, oldest first, with `undefined` for days it was not due. Walking back from the last day, `done` adds one, a day it was not due is passed over, and anything else ends the streak: `missed`, `skipped`, or `pending` on a day that is over. `openLast` is true when the last day is today; its `pending` is passed over, since the day is not over yet.
+`streak(states, openLast)` counts a habit's current streak from its state on each day, oldest first, with `undefined` for days it was not due. Walking back from the last day, `done` and `delayed` each add one (a late done still counts), a day it was not due is passed over, and anything else ends the streak: `missed`, `skipped`, or `pending` on a day that is over. `openLast` is true when the last day is today; its `pending` is passed over, since the day is not over yet.
 
 ```js
 const streak = (states, openLast) => {
   let n = 0;
   for (let i = states.length - 1; i >= 0; i--) {
     const s = states[i];
-    if (s === "done") n++;
+    if (s === "done" || s === "delayed") n++;
     else if (s === undefined || (s === "pending" && openLast && i === states.length - 1)) continue;
     else break;
   }
@@ -642,18 +663,59 @@ const streak = (states, openLast) => {
 
 ### Habits
 
-The weekly grid: one row per habit and one cell per day, coloured by state (a day the habit was not due is grey like the future), then the streak over the days up to today, then the completion count, `done` days over days the habit was stamped.
+The weekly grid: one row per habit and one cell per day, coloured by state (a day the habit was not due is grey like the future), then the streak over the days up to today, then the completion count, `done` and `delayed` days over days the habit was stamped, written `6/7 (5 on time)` when some of them were delayed, then the median delay of the habit's delayed days.
+
+A cell's hover text is its date and state; for a `delayed` day it also gives the time and how late, as in `done 11:05, 2 h late`; for a skipped day it gives the reason, as in `skipped — travelling`. How late is measured against the habit's `due` time, or the end of its `window`, which the query reads from `3-Mycelium/config/habits.toml`; a habit with neither has no delay to measure, so its delayed days say `done 12:00, late` and its median delay is blank. A delay under an hour is written in minutes, otherwise in hours.
 
 ```js
+const clock = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
+const dueAt = {};
+let section = null;
+for (const raw of (await dv.io.load("3-Mycelium/config/habits.toml")).split("\n")) {
+  const line = raw.trim();
+  const head = /^\[habits\.([^\]]+)\]$/.exec(line);
+  if (head) section = head[1];
+  else if (line.startsWith("[")) section = null;
+  const set = section ? /^(due|window)\s*=\s*(.*)$/.exec(line) : null;
+  const times = set ? set[2].match(/\d\d:\d\d/g) : null;
+  if (times) dueAt[section] = clock(set[1] === "due" ? times[0] : times[times.length - 1]);
+}
+const lateBy = (id, p) => {
+  const t = (p.habitTimes ?? {})[id];
+  return typeof t === "string" && /^\d\d:\d\d$/.test(t) && dueAt[id] !== undefined
+    ? clock(t) - dueAt[id]
+    : null;
+};
+const span = (m) => (m < 60 ? `${m} min` : `${Math.round(m / 60)} h`);
+const median = (xs) => {
+  const sorted = [...xs].sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+};
+const escape = (text) =>
+  String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+const hover = (id, p, s) => {
+  if (s === "delayed") {
+    const t = (p.habitTimes ?? {})[id];
+    const late = lateBy(id, p);
+    if (!t) return "delayed";
+    return late === null ? `done ${t}, late` : `done ${t}, ${span(Math.max(late, 0))} late`;
+  }
+  if (s === "skipped") {
+    const reason = (p.skipReasons ?? {})[id];
+    if (reason) return `skipped — ${reason}`;
+  }
+  return s ?? "not due";
+};
 const ids = [...new Set(days.flatMap((p) => Object.keys(p.habits ?? {})))].sort();
-const known = ["pending", "done", "skipped", "missed"];
+const known = ["pending", "done", "delayed", "skipped", "missed"];
 const past = days.filter((p) => p.date <= today);
 const openLast = past.length > 0 && +past[past.length - 1].date === +today;
 const rows = ids.map((id) => {
   const cells = days.map((p) => {
     const s = (p.habits ?? {})[id];
     const state = known.includes(s) ? s : "future";
-    return `<span class="roots-cell roots-${state}" title="${p.date.toFormat("ccc d LLL")}: ${s ?? "not due"}"></span>`;
+    return `<span class="roots-cell roots-${state}" title="${escape(`${p.date.toFormat("ccc d LLL")}: ${hover(id, p, s)}`)}"></span>`;
   });
   const n = streak(
     past.map((p) => (p.habits ?? {})[id]),
@@ -661,34 +723,86 @@ const rows = ids.map((id) => {
   );
   const stamped = days.filter((p) => (p.habits ?? {})[id]).length;
   const done = days.filter((p) => (p.habits ?? {})[id] === "done").length;
-  return [id, cells.join(""), n, `${done}/${stamped}`];
+  const late = days.filter((p) => (p.habits ?? {})[id] === "delayed");
+  const delays = late.map((p) => lateBy(id, p)).filter((m) => m !== null);
+  return [
+    id,
+    cells.join(""),
+    n,
+    `${done + late.length}/${stamped}${late.length ? ` (${done} on time)` : ""}`,
+    delays.length ? span(Math.round(median(delays))) : "",
+  ];
 });
-dv.table(["Habit", "Days", "Streak", "Done"], rows);
+dv.table(["Habit", "Days", "Streak", "Done", "Median delay"], rows);
 ```
 
 ### Heatmap
 
-Used instead of the grid in monthly, quarterly and yearly notes: one calendar per habit, seven rows (Monday first) by one column per week, and the completion percentage in the heading.
+Used instead of the grid in monthly, quarterly and yearly notes: one calendar per habit, seven rows (Monday first) by one column per week, and the completion percentage in the heading. Completion counts `done` and `delayed` days; when some days were delayed the heading also gives the on-time percentage and, where the habit has a `due` time or window in `3-Mycelium/config/habits.toml`, the median delay, as in `meds — 67% (33% on time), median delay 2 h`. A cell's hover text follows the same rules as the Habits grid.
 
 ```js
+const clock = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
+const dueAt = {};
+let section = null;
+for (const raw of (await dv.io.load("3-Mycelium/config/habits.toml")).split("\n")) {
+  const line = raw.trim();
+  const head = /^\[habits\.([^\]]+)\]$/.exec(line);
+  if (head) section = head[1];
+  else if (line.startsWith("[")) section = null;
+  const set = section ? /^(due|window)\s*=\s*(.*)$/.exec(line) : null;
+  const times = set ? set[2].match(/\d\d:\d\d/g) : null;
+  if (times) dueAt[section] = clock(set[1] === "due" ? times[0] : times[times.length - 1]);
+}
+const lateBy = (id, p) => {
+  const t = (p.habitTimes ?? {})[id];
+  return typeof t === "string" && /^\d\d:\d\d$/.test(t) && dueAt[id] !== undefined
+    ? clock(t) - dueAt[id]
+    : null;
+};
+const span = (m) => (m < 60 ? `${m} min` : `${Math.round(m / 60)} h`);
+const median = (xs) => {
+  const sorted = [...xs].sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+};
+const escape = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+const hover = (id, p, s) => {
+  if (s === "delayed") {
+    const t = (p.habitTimes ?? {})[id];
+    const late = lateBy(id, p);
+    if (!t) return "delayed";
+    return late === null ? `done ${t}, late` : `done ${t}, ${span(Math.max(late, 0))} late`;
+  }
+  if (s === "skipped") {
+    const reason = (p.skipReasons ?? {})[id];
+    if (reason) return `skipped — ${reason}`;
+  }
+  return s ?? "not due";
+};
 const ids = [...new Set(days.flatMap((p) => Object.keys(p.habits ?? {})))].sort();
 for (const id of ids) {
   const stamped = days.filter((p) => (p.habits ?? {})[id]);
   const done = stamped.filter((p) => p.habits[id] === "done").length;
-  const pct = stamped.length ? Math.round((100 * done) / stamped.length) : 0;
-  const byDate = new Map(days.map((p) => [p.date.toFormat("yyyy-MM-dd"), (p.habits ?? {})[id]]));
+  const late = stamped.filter((p) => p.habits[id] === "delayed");
+  const pct = (n) => (stamped.length ? Math.round((100 * n) / stamped.length) : 0);
+  const delays = late.map((p) => lateBy(id, p)).filter((m) => m !== null);
+  let heading = `${id} — ${pct(done + late.length)}%`;
+  if (late.length) heading += ` (${pct(done)}% on time)`;
+  if (delays.length) heading += `, median delay ${span(Math.round(median(delays)))}`;
+  const byDate = new Map(days.map((p) => [p.date.toFormat("yyyy-MM-dd"), p]));
   const first = from.minus({ days: from.weekday - 1 });
   const cells = [];
   for (let d = first; d <= to; d = d.plus({ days: 1 })) {
     const col = Math.floor(d.diff(first, "days").days / 7);
-    const s = d >= from ? byDate.get(d.toFormat("yyyy-MM-dd")) : undefined;
+    const p = d >= from ? byDate.get(d.toFormat("yyyy-MM-dd")) : undefined;
+    const s = p ? (p.habits ?? {})[id] : undefined;
     const state = s ?? "future";
     cells.push(
-      `<rect x="${col * 14}" y="${(d.weekday - 1) * 14}" width="12" height="12" rx="2" class="roots-${state}"><title>${d.toFormat("d LLL")}: ${s ?? "not due"}</title></rect>`,
+      `<rect x="${col * 14}" y="${(d.weekday - 1) * 14}" width="12" height="12" rx="2" class="roots-${state}"><title>${escape(`${d.toFormat("d LLL")}: ${hover(id, p, s)}`)}</title></rect>`,
     );
   }
   const weeks = Math.ceil((to.diff(first, "days").days + 1) / 7);
-  dv.header(4, `${id} — ${pct}%`);
+  dv.header(4, heading);
   dv.el(
     "div",
     `<svg class="roots-chart" viewBox="0 0 ${weeks * 14} 98" width="${Math.min(weeks * 14, 720)}">${cells.join("")}</svg>`,
@@ -847,6 +961,7 @@ Wheel of Life values are public to frontier models.
 ```css
 body {
   --roots-done: #3f9d5a;
+  --roots-delayed: #8fc79a;
   --roots-skipped: #d9a21b;
   --roots-missed: #cf4a46;
   --roots-pending: #9aa0a6;
@@ -857,6 +972,11 @@ body {
 .roots-cell.roots-done {
   fill: var(--roots-done);
   background: var(--roots-done);
+}
+.roots-chart rect.roots-delayed,
+.roots-cell.roots-delayed {
+  fill: var(--roots-delayed);
+  background: var(--roots-delayed);
 }
 .roots-chart rect.roots-skipped,
 .roots-cell.roots-skipped {
@@ -898,13 +1018,49 @@ body {
 }
 ```
 
-Done is green, skipped amber, missed red, pending and future grey.
+Done is green, delayed (done, but late) pale green, skipped amber, missed red, pending and future grey.
 
 ## One renderer
 
-`packages/roots` holds one function, `render(kind, date, ctx)`, which returns a note's full text for `kind` in `daily`, `weekly`, `monthly`, `quarterly`, `yearly` or `home`. The build bundles it into `_roots/scripts/roots.js`, a CommonJS file Templater loads as a user script; each template contains only `<% await tp.user.roots(tp) %>`. Obsidian's "Roots: open today" command and `discretion roots new <kind> [date]` therefore run the same code and write identical bytes. `ctx` supplies what the renderer may not read itself: the question list, the per-note data (such as yesterday's links) and nothing from the clock.
+`packages/roots` holds one function, `render(kind, date, ctx)`, which returns a note's full text for `kind` in `daily`, `weekly`, `monthly`, `quarterly`, `yearly` or `home`. The build bundles it into `_roots/scripts/roots.js`, a CommonJS file Templater loads as a user script. The renderer reads the note kind's template, `_roots/templates/<kind>.md`, and fills its placeholders (Customizing Roots); the launcher templates `today.md` and `repair.md` each contain only `<% await tp.user.roots(tp) %>`. Opening today's note in Obsidian is the `today.md` launcher, registered with Templater as "Templater: Insert 1-Roots/_roots/templates/today.md" and bound to Ctrl+Alt+T (Cmd+Option+T on macOS), so Obsidian and `discretion roots new <kind> [date]` run the same code and write identical bytes. `ctx` supplies what the renderer may not read itself: the question list, the per-note data (such as yesterday's links) and nothing from the clock.
 
 If a note already exists it is never rendered again; Discretion edits only its own markers and frontmatter keys. Rendering is deterministic: the same `kind`, `date` and `ctx` give the same bytes, with `\n` line endings and a final newline.
+
+## Customizing Roots
+
+Each note kind's template is a real Markdown file, `_roots/templates/<kind>.md`, that Pranshul edits in Obsidian. It holds the note as this file defines it, and the shared renderer fills a small fixed set of placeholders; everything else is copied as written:
+
+| Placeholder        | Filled with                                                             |
+| ------------------ | ----------------------------------------------------------------------- |
+| `{{frontmatter}}`  | The whole frontmatter block, fences included                            |
+| `{{title}}`        | The note's title text (the template writes the `#` before it)           |
+| `{{links}}`        | The line linking the neighbouring notes                                 |
+| `{{date}}`         | The note's date, `YYYY-MM-DD`                                           |
+| `{{question}}`     | The day's prompt from `questions.md`                                    |
+| `{{query:<name>}}` | One complete `dataviewjs` block: the query's preamble, helpers and body |
+
+The query names are the Recap queries' bodies, and the table under Recap queries says which helpers each one carries. `{{query:ratings-bars}}` and `{{query:ratings-trend}}` are the Ratings body with `mode` `"bars"` and `"trend"`; `{{query:logs}}`, `{{query:days}}`, `{{query:habits}}`, `{{query:heatmap}}`, `{{query:wheel-progression}}` and `{{query:notes-below}}` are the bodies of the same names; and Home's four blocks are `{{query:home-today}}`, `{{query:home-week}}`, `{{query:home-streaks}}` and `{{query:home-trend}}`. Each note kind's default template holds the queries its section lists, in that order.
+
+Adding, removing, reordering or renaming a section is an edit to that file. Templater still runs the same renderer, so Obsidian and `discretion roots new` give identical bytes from the same template. The golden files pin the shipped default templates. Template edits apply to notes created after the edit; existing notes are never re-rendered.
+
+**Nothing depends on position or headings.** Every Discretion writer (the habit stamper, the planner, the capture pipeline, the tracker, the summariser) finds its place only by its marker pair. If a note lacks the pair, the writer skips that note and logs it, and `discretion doctor` lists it; it never fails, guesses a position or writes elsewhere. Recap queries read only frontmatter and tags, so changing headings or the order of sections never changes a recap. An unknown placeholder renders as visible text, `{{like this}}`, plus a `discretion doctor` warning, not an error.
+
+**Defaults and upgrades.** Install writes the default templates once and never overwrites an edited one; the same holds for `questions.md`, `roots.css` and `Roots.md`. `discretion roots status` shows which templates differ from the shipped default; `discretion roots template diff <kind>` shows the difference and `discretion roots template reset <kind>` restores the default (the old file is kept in git). When a Discretion update changes a default, an edited template is left alone and `discretion doctor` says what changed.
+
+**Safety nets.** The vault is a git repository with idle commits every 30 minutes, so `discretion roots history <note>` lists earlier versions of a note and `discretion roots restore <note> <commit>` brings one back. Install also turns on Obsidian's core File recovery plugin, which snapshots notes every few minutes.
+
+## Repairing a note
+
+A note whose section was deleted by accident is restored without losing what Pranshul wrote. `discretion roots repair <note-or-date> [--dry-run]` renders the note's kind and date from the current template, then carries everything over from the existing note:
+
+- every frontmatter value, key by key;
+- the content of every marker pair;
+- the lines above `<!-- roots:quick-notes:end -->`;
+- the text under each heading Pranshul wrote.
+
+Text that cannot be placed goes into a `## Recovered` section at the end, so nothing is ever dropped. `--dry-run` shows the diff. The real run commits the vault before and after, so a repair can itself be undone.
+
+In Obsidian, repair is the Templater template `_roots/templates/repair.md`, one line calling the shared renderer's repair. Install registers it in Templater's "Template hotkeys", so it appears in the command palette as "Templater: Insert 1-Roots/_roots/templates/repair.md", and binds it to Ctrl+Alt+R (Cmd+Option+R on macOS) unless that key is taken, in which case install says so. It acts on the open note, shows the diff in a modal, and writes only after Apply. `discretion doctor` messages about a damaged note give both the hotkey and the `discretion roots repair <date>` command.
 
 ## Marker rules
 

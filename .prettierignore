@@ -1,3 +1,4 @@
 dist/
 pnpm-lock.yaml
 schemas/
+docs/
