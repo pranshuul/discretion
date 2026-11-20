@@ -46,7 +46,7 @@ function stubCli(dir: string, plan = ""): { path: string; log: string } {
     path,
     `import { appendFileSync, existsSync, writeFileSync } from "node:fs";
 const args = process.argv.slice(2);
-appendFileSync(${JSON.stringify(log)}, args.join(" ") + "\n");
+appendFileSync(${JSON.stringify(log)}, args.join(" ") + "\\n");
 const plan = ${JSON.stringify(plan)};
 if (args.includes("--dry-run")) {
   console.log(plan && !existsSync(${JSON.stringify(marker)}) ? "would: " + plan : "nothing to do");

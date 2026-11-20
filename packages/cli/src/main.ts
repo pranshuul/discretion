@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { formatFindings, runDoctor } from "./doctor.js";
+import { rootsCommand } from "./roots.js";
 import {
   DiscretionError,
   resolveWorkflow,
@@ -99,6 +100,9 @@ async function doctorCommand(argv: string[], stdout: Output, stderr: Output): Pr
 export async function run(argv: string[], stdout: Output, stderr: Output): Promise<number> {
   if (argv[0] === "run") {
     return runCommand(argv.slice(1), stdout, stderr);
+  }
+  if (argv[0] === "roots") {
+    return rootsCommand(argv.slice(1), stdout, stderr);
   }
   if (argv[0] === "doctor") {
     return doctorCommand(argv.slice(1), stdout, stderr);

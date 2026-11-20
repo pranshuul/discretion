@@ -5,6 +5,10 @@
 #
 # Step 2: create the vault (default ~/vault) as a git repository with 1-Roots, 2-Orchard,
 # 3-Mycelium (with its subfolders), 4-Nursery, a .gitignore and a .gitattributes.
+# Step 3: install Roots into the vault with `discretion roots install`: the templates, Roots.md,
+# the CSS snippet, the .obsidian settings, and Templater, Dataview and Meta Bind at their pinned
+# versions with their SHA-256 checked. DISCRETION_CLI names the CLI entry point to run with node
+# (default: the one in this repository).
 set -eu
 
 dry=0
@@ -56,5 +60,18 @@ done
 ensure_line "$vault/.gitignore" ".obsidian/workspace*.json"
 ensure_line "$vault/.gitignore" ".trash/"
 ensure_line "$vault/.gitattributes" "1-Roots/** filter=git-crypt diff=git-crypt"
+
+cli=${DISCRETION_CLI:-"$(cd "$(dirname "$0")/.." && pwd)/packages/cli/bin/discretion.js"}
+plan=$(node "$cli" roots install --vault "$vault" --dry-run)
+if printf '%s\n' "$plan" | grep -q '^would: '; then
+  changed=1
+  if [ "$dry" = 1 ]; then
+    printf '%s\n' "$plan"
+  else
+    node "$cli" roots install --vault "$vault"
+  fi
+else
+  printf '%s\n' "$plan" | grep '^note: ' || true
+fi
 
 [ "$changed" = 1 ] || echo "nothing to do"
