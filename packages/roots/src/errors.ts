@@ -5,8 +5,8 @@ export class RootsError extends Error {
 
   constructor(code: string, message: string, remedy: string) {
     super(message);
+    this.name = "RootsError";
     this.code = code;
     this.remedy = remedy;
-    throw new Error("red");
   }
 }

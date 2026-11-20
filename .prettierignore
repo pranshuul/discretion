@@ -2,3 +2,4 @@ dist/
 pnpm-lock.yaml
 schemas/
 docs/
+packages/roots/assets/scripts/

@@ -183,7 +183,7 @@ describe("discretion roots new", () => {
       path: "1-Roots/Monthly/2026/2026-11.md",
     });
     expect(Object.keys(JSON.parse(out) as object)).toEqual(["created", "dry_run", "path"]);
-    expect(existsSync(join(vault, "1-Roots/Monthly"))).toBe(false);
+    expect(existsSync(join(vault, "1-Roots/Monthly/2026"))).toBe(false);
     expect(out.startsWith("{")).toBe(true);
   });
 

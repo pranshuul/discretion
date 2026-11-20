@@ -90,7 +90,7 @@ describe("render", () => {
     expect(
       text.startsWith(`---\nroots: 1\nkind: ${name}\nfrom: ${from}\nto: ${to}\n---\n\n# `),
     ).toBe(true);
-    expect(text).not.toContain("wheel:");
+    expect(text.split("\n---\n")[0]).not.toContain("wheel");
     expect(text).toContain(`# ${noteTitle(kind, "2026-11-05")}\n`);
   });
 

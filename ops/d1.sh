@@ -5,9 +5,9 @@
 #
 # Step 2: create the vault (default ~/vault) as a git repository with 1-Roots, 2-Orchard,
 # 3-Mycelium (with its subfolders), 4-Nursery, a .gitignore and a .gitattributes.
-# Step 3: install Roots into the vault with `discretion roots install`: the templates, Roots.md,
-# the CSS snippet, the .obsidian settings, and Templater, Dataview and Meta Bind at their pinned
-# versions with their SHA-256 checked. DISCRETION_CLI names the CLI entry point to run with node
+# Step 3: install Roots into the vault with `discretion roots install`: the templates, the
+# launchers, the renderer bundle, AGENTS.md, Roots.md, the CSS snippet, the .obsidian settings,
+# and Templater, Dataview and Meta Bind at their pinned versions with their SHA-256 checked. DISCRETION_CLI names the CLI entry point to run with node
 # (default: the one in this repository).
 set -eu
 
@@ -71,5 +71,8 @@ if printf '%s\n' "$plan" | grep -q '^would: '; then
     node "$cli" roots install --vault "$vault"
   fi
 fi
+
+# Notes install prints (a hotkey that was taken, say) are shown on every run.
+printf '%s\n' "$plan" | grep '^note: ' || true
 
 [ "$changed" = 1 ] || echo "nothing to do"

@@ -1,10 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PluginsLock } from "@discretion/model";
-import { templateNames } from "./assets.js";
+import { launcherNames, launcherText, shippedBundle, templateNames } from "./assets.js";
 import { sha256Of } from "./hash.js";
 import { pinnedPlugins, type PinnedPlugin } from "./pins.js";
-import { isRecord, readJson, rootsSettings } from "./settings.js";
+import { isRecord, launcherPath, readJson, rootsSettings } from "./settings.js";
 
 export interface StatusItem {
   kind: "plugin" | "lock" | "setting" | "template" | "file";
@@ -79,8 +79,27 @@ export async function status(options: StatusOptions): Promise<StatusItem[]> {
   const templaterSettings = isRecord(templater) ? templater : {};
   setting(
     "templater template folder",
-    templaterSettings.templates_folder === rootsSettings.templatesFolder,
-    `Templater's template folder should be ${rootsSettings.templatesFolder}`,
+    templaterSettings.templates_folder === rootsSettings.launchersFolder,
+    `Templater's template folder should be ${rootsSettings.launchersFolder}`,
+  );
+  const folders = Array.isArray(templaterSettings.folder_templates)
+    ? (templaterSettings.folder_templates as unknown[])
+    : [];
+  setting(
+    "templater folder templates",
+    templaterSettings.enable_folder_templates === true &&
+      rootsSettings.folderTemplates.every((f) =>
+        folders.some((e) => isRecord(e) && e.folder === f.folder && e.template === f.template),
+      ),
+    "Templater's folder templates should create each periodic note from its launcher",
+  );
+  const hotkeys = Array.isArray(templaterSettings.enabled_templates_hotkeys)
+    ? (templaterSettings.enabled_templates_hotkeys as unknown[])
+    : [];
+  setting(
+    "templater template hotkeys",
+    rootsSettings.hotkeyLaunchers.every((l) => hotkeys.includes(launcherPath(l.name))),
+    "Templater should list the today and repair launchers under Template hotkeys",
   );
   setting(
     "templater user-script folder",
@@ -94,6 +113,11 @@ export async function status(options: StatusOptions): Promise<StatusItem[]> {
     "core Daily notes plugin",
     core !== undefined && !coreOn("daily-notes"),
     "the core Daily notes plugin should be off",
+  );
+  setting(
+    "core File recovery plugin",
+    coreOn("file-recovery"),
+    "the core File recovery plugin should be on",
   );
   const appearance = readJson(vault, ".obsidian/appearance.json");
   const snippets = isRecord(appearance) ? appearance.enabledCssSnippets : undefined;
@@ -129,12 +153,34 @@ export async function status(options: StatusOptions): Promise<StatusItem[]> {
   }
   checkExists("file", "questions.md", "1-Roots/_roots/questions.md");
   checkExists("file", "roots.css", "1-Roots/_roots/roots.css");
+
+  // Machinery install keeps exactly as shipped: any difference is drift.
+  for (const name of launcherNames) {
+    const current = text(launcherPath(name));
+    if (current === null) add("file", `launchers/${name}.md`, `missing: ${launcherPath(name)}`);
+    else if (current !== launcherText) {
+      add(
+        "file",
+        `launchers/${name}.md`,
+        "differs from the one-line call: run discretion roots install",
+      );
+    }
+  }
+  const bundle = text(`${rootsSettings.userScriptsFolder}/roots.js`);
+  if (bundle === null) {
+    add("file", "roots.js", `missing: ${rootsSettings.userScriptsFolder}/roots.js`);
+  } else if (bundle !== shippedBundle()) {
+    add(
+      "file",
+      "roots.js",
+      "differs from the shipped renderer bundle: run discretion roots install",
+    );
+  }
   const roots = text("1-Roots/_roots/roots.css");
   if (roots !== null && text(".obsidian/snippets/roots.css") !== roots) {
     add(
       "file",
       "roots.css snippet copy",
-
       ".obsidian/snippets/roots.css differs from _roots/roots.css: run discretion roots install",
     );
   }

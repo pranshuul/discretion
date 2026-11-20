@@ -77,5 +77,8 @@
   "dependencies": {
     "@discretion/core": "workspace:*",
     "@discretion/model": "workspace:*"
+  },
+  "scripts": {
+    "bundle": "tsc -b && node scripts/bundle.mjs"
   }
 }

@@ -124,22 +124,22 @@ describe("repairText", () => {
   it("carries the quick-notes lines above the end marker", () => {
     const note = swap(
       daily(),
-      "<!-- roots:quick-notes:end -->",
-      " - #progress  wrote the renderer\n - #idea  a journal for plants #captured ^cap-20261105-x2b8pd\n<!-- roots:quick-notes:end -->",
+      "\n<!-- roots:quick-notes:end -->\n",
+      "\n - #progress  wrote the renderer\n - #idea  a journal for plants #captured ^cap-20261105-x2b8pd\n<!-- roots:quick-notes:end -->\n",
     );
     const text = repairText(note, daily());
     expect(text).toContain(
-      " - #progress  wrote the renderer\n - #idea  a journal for plants #captured ^cap-20261105-x2b8pd\n<!-- roots:quick-notes:end -->",
+      " - #progress  wrote the renderer\n - #idea  a journal for plants #captured ^cap-20261105-x2b8pd\n<!-- roots:quick-notes:end -->\n",
     );
-    expect(text.split("#progress")).toHaveLength(2);
+    expect(text.split("wrote the renderer")).toHaveLength(2);
   });
 
   it("keeps quick-notes lines in order after the Quick notes heading was renamed", () => {
     const note = swap(
       swap(
         daily(),
-        "<!-- roots:quick-notes:end -->",
-        " - #highlight  met a friend\n<!-- roots:quick-notes:end -->",
+        "\n<!-- roots:quick-notes:end -->\n",
+        "\n - #highlight  met a friend\n<!-- roots:quick-notes:end -->\n",
       ),
       "## Quick notes",
       "## Notes to self",
@@ -219,8 +219,8 @@ describe("repairText", () => {
     note = swap(note, "## Rating\n", "## Rating\n\nExtra under rating.\n");
     note = swap(
       note,
-      "<!-- roots:quick-notes:end -->",
-      " - #progress  a\n\n - #idea  b\n<!-- roots:quick-notes:end -->",
+      "\n<!-- roots:quick-notes:end -->\n",
+      "\n - #progress  a\n\n - #idea  b\n<!-- roots:quick-notes:end -->\n",
     );
     note = `${note}\n## Elsewhere\n\nStray.\n\n\n\nMore stray.\n`;
     note = swap(note, "alias:\n", "alias: x\nextra: 1\n");
@@ -244,8 +244,8 @@ describe("repairText", () => {
     );
     note = swap(
       note,
-      "<!-- roots:quick-notes:end -->",
-      `${written[2]}\n<!-- roots:quick-notes:end -->`,
+      "\n<!-- roots:quick-notes:end -->\n",
+      `\n${written[2]}\n<!-- roots:quick-notes:end -->\n`,
     );
     note = swap(note, "## Rating\n", `## Rating\n\n${written[3]}\n`);
     note = without(note, "## Habits");
