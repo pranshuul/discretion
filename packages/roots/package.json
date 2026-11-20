@@ -28,10 +28,6 @@
     "./template": {
       "types": "./dist/template.d.ts",
       "default": "./dist/template.js"
-    },
-    "./templates": {
-      "types": "./dist/templates.d.ts",
-      "default": "./dist/templates.js"
     }
   },
   "dependencies": {

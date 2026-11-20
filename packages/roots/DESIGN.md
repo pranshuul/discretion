@@ -22,14 +22,12 @@ All paths are under `1-Roots/`. Dates are the local calendar date, weeks are ISO
 ```
 _roots/
   templates/{daily,weekly,monthly,quarterly,yearly,home}.md   each note kind's template, a real Markdown file
-  templates/today.md          launcher: <% await tp.user.roots(tp) %>
-  templates/repair.md         launcher: <% await tp.user.roots(tp) %>
   scripts/roots.js            the renderer bundle (CommonJS), loaded by Templater as a user script
   questions.md                the 366 prompts of the Question list, one per day of the year
   roots.css                   the CSS snippet defined under Colours
 ```
 
-The six note templates hold each note as this file defines it, with the placeholders listed under Customizing Roots; Pranshul edits them in Obsidian. `today.md` and `repair.md` are the two Templater launchers, a single line apiece. `roots.js` receives the launcher's name from the file it was run from (`today.md` creates today's daily note, `repair.md` repairs the open note), and the date from the note being created, which is today unless the command names another date.
+The six note templates hold each note as this file defines it, with the placeholders listed under Templates; Pranshul edits them in Obsidian. `roots.js` receives the note kind from the template it was run from (`daily.md` gives `daily`), and the date from the note being created, which is today unless the command names another date.
 
 ## Plugins
 
@@ -39,9 +37,7 @@ The six note templates hold each note as this file defines it, with the placehol
 | Dataview  | Every rollup, list, chart and heatmap (DQL and `dataviewjs`)                   |
 | Meta Bind | The rating slider, alias input, weekly wheel sliders, habit inputs and buttons |
 
-`discretion roots install` downloads each plugin from its official GitHub release at a pinned version, checks the SHA-256 of every file, and records the result in `~/vault/.discretion/plugins.lock.json`. It refuses on a hash mismatch (D2010). `discretion doctor` and `discretion roots status` flag drift. The `.obsidian` settings Roots needs are: Templater's template folder `1-Roots/_roots/templates` and user-script folder `1-Roots/_roots/scripts`, the core Daily notes plugin off, the core File recovery plugin on (it snapshots notes every few minutes, one of the safety nets under Customizing Roots), the `roots` CSS snippet on (install copies `_roots/roots.css` to `.obsidian/snippets/roots.css`, the only folder Obsidian reads snippets from), and the three plugins listed in `community-plugins.json` so Obsidian loads them. Install merges these into the files that are already there and keeps every other key.
-
-Roots has no Obsidian plugin of its own, so its two commands are Templater templates. Install lists `_roots/templates/repair.md` and `_roots/templates/today.md` under Templater's "Template hotkeys" (`enabled_templates_hotkeys`), which makes them appear in the command palette as "Templater: Insert 1-Roots/_roots/templates/repair.md" and "Templater: Insert 1-Roots/_roots/templates/today.md", and binds Ctrl+Alt+R and Ctrl+Alt+T to them (Cmd+Option+R and Cmd+Option+T on macOS) in `.obsidian/hotkeys.json`. A key that another command already holds is left alone: install says which one it did not bind, and the command stays in the palette. A binding Pranshul changes afterwards is kept.
+`discretion roots install` downloads each plugin from its official GitHub release at a pinned version, checks the SHA-256 of every file, and records the result in `~/vault/.discretion/plugins.lock.json`. It refuses on a hash mismatch (D2010). `discretion doctor` and `discretion roots status` flag drift. The `.obsidian` settings Roots needs are: Templater's template folder `1-Roots/_roots/templates` and user-script folder `1-Roots/_roots/scripts`, the core Daily notes plugin off, the `roots` CSS snippet on (install copies `_roots/roots.css` to `.obsidian/snippets/roots.css`, the only folder Obsidian reads snippets from), and the three plugins listed in `community-plugins.json` so Obsidian loads them. Install merges these into the files that are already there and keeps every other key.
 
 The charts are `dataviewjs` blocks, so Roots also needs Dataview's JavaScript queries, a required setting the plan's install step must write too: `discretion roots install` writes Dataview's settings file, `.obsidian/plugins/dataview/data.json`, with `enableDataviewJs: true` and `enableInlineDataviewJs: true`, alongside the settings above. Other Dataview settings keep their defaults.
 
@@ -1022,11 +1018,11 @@ Done is green, delayed (done, but late) pale green, skipped amber, missed red, p
 
 ## One renderer
 
-`packages/roots` holds one function, `render(kind, date, ctx)`, which returns a note's full text for `kind` in `daily`, `weekly`, `monthly`, `quarterly`, `yearly` or `home`. The build bundles it into `_roots/scripts/roots.js`, a CommonJS file Templater loads as a user script. The renderer reads the note kind's template, `_roots/templates/<kind>.md`, and fills its placeholders (Customizing Roots); the launcher templates `today.md` and `repair.md` each contain only `<% await tp.user.roots(tp) %>`. Opening today's note in Obsidian is the `today.md` launcher, registered with Templater as "Templater: Insert 1-Roots/_roots/templates/today.md" and bound to Ctrl+Alt+T (Cmd+Option+T on macOS), so Obsidian and `discretion roots new <kind> [date]` run the same code and write identical bytes. `ctx` supplies what the renderer may not read itself: the question list, the per-note data (such as yesterday's links) and nothing from the clock.
+`packages/roots` holds one function, `render(kind, date, ctx)`, which returns a note's full text for `kind` in `daily`, `weekly`, `monthly`, `quarterly`, `yearly` or `home`. The build bundles it into `_roots/scripts/roots.js`, a CommonJS file Templater loads as a user script. The renderer reads the note kind's template, `_roots/templates/<kind>.md`, and fills its placeholders (Templates), so Obsidian and `discretion roots new <kind> [date]` run the same code and write identical bytes. `ctx` supplies what the renderer may not read itself: the question list, the per-note data (such as yesterday's links) and nothing from the clock.
 
 If a note already exists it is never rendered again; Discretion edits only its own markers and frontmatter keys. Rendering is deterministic: the same `kind`, `date` and `ctx` give the same bytes, with `\n` line endings and a final newline.
 
-## Customizing Roots
+## Templates
 
 Each note kind's template is a real Markdown file, `_roots/templates/<kind>.md`, that Pranshul edits in Obsidian. It holds the note as this file defines it, and the shared renderer fills a small fixed set of placeholders; everything else is copied as written:
 
@@ -1045,22 +1041,7 @@ Adding, removing, reordering or renaming a section is an edit to that file. Temp
 
 **Nothing depends on position or headings.** Every Discretion writer (the habit stamper, the planner, the capture pipeline, the tracker, the summariser) finds its place only by its marker pair. If a note lacks the pair, the writer skips that note and logs it, and `discretion doctor` lists it; it never fails, guesses a position or writes elsewhere. Recap queries read only frontmatter and tags, so changing headings or the order of sections never changes a recap. An unknown placeholder renders as visible text, `{{like this}}`, plus a `discretion doctor` warning, not an error.
 
-**Defaults and upgrades.** Install writes the default templates once and never overwrites an edited one; the same holds for `questions.md`, `roots.css` and `Roots.md`. `discretion roots status` shows which templates differ from the shipped default; `discretion roots template diff <kind>` shows the difference and `discretion roots template reset <kind>` restores the default (the old file is kept in git). When a Discretion update changes a default, an edited template is left alone and `discretion doctor` says what changed.
-
-**Safety nets.** The vault is a git repository with idle commits every 30 minutes, so `discretion roots history <note>` lists earlier versions of a note and `discretion roots restore <note> <commit>` brings one back. Install also turns on Obsidian's core File recovery plugin, which snapshots notes every few minutes.
-
-## Repairing a note
-
-A note whose section was deleted by accident is restored without losing what Pranshul wrote. `discretion roots repair <note-or-date> [--dry-run]` renders the note's kind and date from the current template, then carries everything over from the existing note:
-
-- every frontmatter value, key by key;
-- the content of every marker pair;
-- the lines above `<!-- roots:quick-notes:end -->`;
-- the text under each heading Pranshul wrote.
-
-Text that cannot be placed goes into a `## Recovered` section at the end, so nothing is ever dropped. `--dry-run` shows the diff. The real run commits the vault before and after, so a repair can itself be undone.
-
-In Obsidian, repair is the Templater template `_roots/templates/repair.md`, one line calling the shared renderer's repair. Install registers it in Templater's "Template hotkeys", so it appears in the command palette as "Templater: Insert 1-Roots/_roots/templates/repair.md", and binds it to Ctrl+Alt+R (Cmd+Option+R on macOS) unless that key is taken, in which case install says so. It acts on the open note, shows the diff in a modal, and writes only after Apply. `discretion doctor` messages about a damaged note give both the hotkey and the `discretion roots repair <date>` command.
+**Defaults.** Install writes the default templates once and never overwrites an edited one; the same holds for `questions.md`, `roots.css` and `Roots.md`. `discretion roots status` lists a template or file that is missing; an edited one is Pranshul's own and is not drift.
 
 ## Marker rules
 

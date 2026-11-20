@@ -4,17 +4,7 @@ import { DiscretionError } from "@discretion/core";
 import { shippedCss, shippedQuestions, shippedTemplate, templateNames } from "./assets.js";
 import { sha256Of as sha256 } from "./hash.js";
 import { pinnedPlugins, releaseUrl, type PinnedPlugin } from "./pins.js";
-import {
-  bindingKey,
-  commandId,
-  describeKey,
-  isBinding,
-  isRecord,
-  modifiersFor,
-  readJson,
-  rootsSettings,
-  type Binding,
-} from "./settings.js";
+import { isRecord, readJson, rootsSettings } from "./settings.js";
 import { fillTemplate } from "./template.js";
 
 export interface InstallOptions {
@@ -26,15 +16,11 @@ export interface InstallOptions {
   githubBase?: string;
   /** Replaces the pinned plugin list. */
   plugins?: readonly PinnedPlugin[];
-  /** Picks the hotkey modifiers; the running platform by default. */
-  platform?: NodeJS.Platform;
 }
 
 export interface InstallResult {
   /** What was done, or with `dryRun` what would be. Empty when everything is in place. */
   changes: string[];
-  /** Things to tell the user, such as a hotkey that was already taken. */
-  notices: string[];
 }
 
 const layout = [
@@ -88,8 +74,8 @@ function refuseHash(plugin: PinnedPlugin, file: string, url: string, actual: str
 
 function refuseDownload(plugin: PinnedPlugin, file: string, url: string, why: string): never {
   throw new DiscretionError(
-    "D2011",
-    `Could not download ${plugin.id} ${file} from ${url}: ${why}. Nothing was written.`,
+    "D2010",
+    `Could not download ${plugin.id} ${file} from ${url}: ${why}, so its SHA-256 could not be checked. Nothing was written.`,
     "Check the network connection, then run discretion roots install again.",
   );
 }
@@ -124,11 +110,9 @@ const fileBytes = (vault: string, path: string): Buffer | null => {
 export async function install(options: InstallOptions): Promise<InstallResult> {
   const vault = resolve(options.vault);
   const plugins = [...(options.plugins ?? pinnedPlugins)].sort((a, b) => (a.id < b.id ? -1 : 1));
-  const platform = options.platform ?? process.platform;
   const fetcher = options.fetch ?? fetch;
   const base = options.githubBase ?? "https://github.com";
   const writes: Write[] = [];
-  const notices: string[] = [];
   const changes: string[] = [];
   const text = (path: string): string | null => fileBytes(vault, path)?.toString("utf8") ?? null;
 
@@ -195,11 +179,8 @@ export async function install(options: InstallOptions): Promise<InstallResult> {
   };
 
   merge(".obsidian/core-plugins.json", (existing) => {
-    if (Array.isArray(existing)) {
-      const enabled = existing.filter((id) => id !== "daily-notes");
-      return enabled.includes("file-recovery") ? enabled : [...enabled, "file-recovery"];
-    }
-    return { ...(isRecord(existing) ? existing : {}), "daily-notes": false, "file-recovery": true };
+    if (Array.isArray(existing)) return existing.filter((id) => id !== "daily-notes");
+    return { ...(isRecord(existing) ? existing : {}), "daily-notes": false };
   });
 
   merge(".obsidian/community-plugins.json", (existing) => {
@@ -227,46 +208,11 @@ export async function install(options: InstallOptions): Promise<InstallResult> {
     enableInlineDataviewJs: true,
   }));
 
-  const hotkeyPaths = rootsSettings.hotkeyTemplates.map(
-    (t) => `${rootsSettings.templatesFolder}/${t.name}.md`,
-  );
-  merge(".obsidian/plugins/templater-obsidian/data.json", (existing) => {
-    const settings = isRecord(existing) ? existing : {};
-    const listed = Array.isArray(settings.enabled_templates_hotkeys)
-      ? (settings.enabled_templates_hotkeys as string[]).filter((p) => p !== "")
-      : [];
-    return {
-      ...settings,
-      templates_folder: rootsSettings.templatesFolder,
-      user_scripts_folder: rootsSettings.userScriptsFolder,
-      enabled_templates_hotkeys: [...listed, ...hotkeyPaths.filter((p) => !listed.includes(p))],
-    };
-  });
-
-  merge(".obsidian/hotkeys.json", (existing) => {
-    const bound: Record<string, unknown> = isRecord(existing) ? { ...existing } : {};
-    const taken = new Map<string, string>();
-    for (const [command, bindings] of Object.entries(bound)) {
-      if (Array.isArray(bindings)) {
-        for (const b of bindings.filter(isBinding)) taken.set(bindingKey(platform, b), command);
-      }
-    }
-    for (const t of rootsSettings.hotkeyTemplates) {
-      const id = commandId(t.name);
-      if (id in bound) continue;
-      const binding: Binding = { modifiers: modifiersFor(platform), key: t.key };
-      const holder = taken.get(bindingKey(platform, binding));
-      if (holder !== undefined) {
-        notices.push(
-          `${describeKey(platform, t.key)} is already bound to ${holder}, so ${t.name}.md has no hotkey; it is still in the command palette as "Templater: Insert ${rootsSettings.templatesFolder}/${t.name}.md". Bind a key to it under Settings, Hotkeys, to ${t.purpose} from the keyboard.`,
-        );
-        continue;
-      }
-      bound[id] = [binding];
-      taken.set(bindingKey(platform, binding), id);
-    }
-    return bound;
-  });
+  merge(".obsidian/plugins/templater-obsidian/data.json", (existing) => ({
+    ...(isRecord(existing) ? existing : {}),
+    templates_folder: rootsSettings.templatesFolder,
+    user_scripts_folder: rootsSettings.userScriptsFolder,
+  }));
 
   const lock = lockText(plugins);
   if (text(".discretion/plugins.lock.json") !== lock) {
@@ -287,5 +233,5 @@ export async function install(options: InstallOptions): Promise<InstallResult> {
       writeFileSync(join(vault, w.path), w.data);
     }
   }
-  return { changes, notices };
+  return { changes };
 }

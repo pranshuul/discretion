@@ -3,10 +3,8 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { DiscretionError, readConfig, stableStringify } from "@discretion/core";
-import { templateNames, type TemplateName } from "@discretion/roots/assets";
 import { install } from "@discretion/roots/install";
 import { status, type StatusItem } from "@discretion/roots/status";
-import { templateDiff, templateReset } from "@discretion/roots/templates";
 
 interface Output {
   write(text: string): unknown;
@@ -15,14 +13,6 @@ interface Output {
 const usage = [
   "Usage: discretion roots install [--vault <dir>] [--dry-run] [--json]",
   "       discretion roots status [--vault <dir>] [--json]",
-  "       discretion roots template diff <kind> [--vault <dir>] [--json]",
-  "       discretion roots template reset <kind> [--vault <dir>] [--dry-run] [--json]",
-  "",
-].join("\n");
-
-const templateUsage = [
-  `Usage: discretion roots template diff|reset <kind> [--vault <dir>] [--dry-run] [--json]`,
-  `<kind> is one of ${templateNames.join(", ")}.`,
   "",
 ].join("\n");
 
@@ -43,7 +33,7 @@ async function vaultPath(flag: string | undefined): Promise<string> {
 
 function lines(items: StatusItem[]): string {
   if (items.length === 0) return "no drift\n";
-  return `${items.map((i) => `${i.severity} ${i.kind} ${i.name}: ${i.message}`).join("\n")}\n`;
+  return `${items.map((i) => `drift ${i.kind} ${i.name}: ${i.message}`).join("\n")}\n`;
 }
 
 /** `discretion roots …`: 0 on success, 1 on a refusal or drift, 2 on bad usage. */
@@ -73,50 +63,18 @@ export async function rootsCommand(
           : { githubBase: process.env.DISCRETION_GITHUB_BASE }),
       });
       if (json) {
-        stdout.write(
-          `${stableStringify({ changes: result.changes, dry_run: dryRun, notices: result.notices })}\n`,
-        );
+        stdout.write(`${stableStringify({ changes: result.changes, dry_run: dryRun })}\n`);
       } else {
         const prefix = dryRun ? "would: " : "";
         const done = result.changes.map((c) => `${prefix}${c}\n`);
         stdout.write(done.length > 0 ? done.join("") : "nothing to do\n");
-        for (const notice of result.notices) stdout.write(`note: ${notice}\n`);
       }
       return 0;
     }
     if (sub === "status" && positionals.length === 0 && !dryRun) {
       const items = await status({ vault: await vaultPath(values.vault) });
       stdout.write(json ? `${stableStringify({ items })}\n` : lines(items));
-      return items.some((i) => i.severity === "drift") ? 1 : 0;
-    }
-    if (sub === "template") {
-      const [action, kind, ...extra] = positionals;
-      const known = (templateNames as readonly string[]).includes(kind ?? "");
-      if ((action !== "diff" && action !== "reset") || !known || extra.length > 0) {
-        stderr.write(templateUsage);
-        return 2;
-      }
-      const name = kind as TemplateName;
-      const vault = await vaultPath(values.vault);
-      if (action === "diff") {
-        if (dryRun) {
-          stderr.write(templateUsage);
-          return 2;
-        }
-        const diff = await templateDiff(vault, name);
-        if (json) stdout.write(`${stableStringify({ diff, template: name })}\n`);
-        else stdout.write(diff === "" ? `${name}.md is the shipped default\n` : diff);
-        return 0;
-      }
-      const changed = await templateReset(vault, name, dryRun);
-      if (json) {
-        stdout.write(`${stableStringify({ changed, dry_run: dryRun, template: name })}\n`);
-      } else if (!changed) {
-        stdout.write(`${name}.md is already the shipped default\n`);
-      } else {
-        stdout.write(`${dryRun ? "would: reset" : "reset"} ${name}.md to the shipped default\n`);
-      }
-      return 0;
+      return items.length > 0 ? 1 : 0;
     }
   } catch (error) {
     if (error instanceof DiscretionError) {

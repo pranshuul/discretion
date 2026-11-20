@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PluginsLock } from "@discretion/model";
-import { shippedCss, shippedQuestions, shippedTemplate, templateNames } from "./assets.js";
+import { templateNames } from "./assets.js";
 import { sha256Of } from "./hash.js";
 import { pinnedPlugins, type PinnedPlugin } from "./pins.js";
 import { isRecord, readJson, rootsSettings } from "./settings.js";
@@ -9,8 +9,6 @@ import { isRecord, readJson, rootsSettings } from "./settings.js";
 export interface StatusItem {
   kind: "plugin" | "lock" | "setting" | "template" | "file";
   name: string;
-  /** `drift` is something to fix; `modified` is a file Pranshul edited on purpose. */
-  severity: "drift" | "modified";
   message: string;
 }
 
@@ -26,13 +24,8 @@ export async function status(options: StatusOptions): Promise<StatusItem[]> {
   const vault = options.vault;
   const plugins = options.plugins ?? pinnedPlugins;
   const items: StatusItem[] = [];
-  const add = (
-    kind: StatusItem["kind"],
-    name: string,
-    severity: StatusItem["severity"],
-    message: string,
-  ): void => {
-    items.push({ kind, name, severity, message });
+  const add = (kind: StatusItem["kind"], name: string, message: string): void => {
+    items.push({ kind, name, message });
   };
   const text = (path: string): string | null =>
     existsSync(join(vault, path)) ? readFileSync(join(vault, path), "utf8") : null;
@@ -41,27 +34,22 @@ export async function status(options: StatusOptions): Promise<StatusItem[]> {
   const lockPath = ".discretion/plugins.lock.json";
   const lockText = text(lockPath);
   if (lockText === null) {
-    add("lock", "plugins.lock.json", "drift", "missing: run discretion roots install");
+    add("lock", "plugins.lock.json", "missing: run discretion roots install");
   } else {
     let lock: PluginsLock | null = null;
     try {
       lock = PluginsLock.parse(JSON.parse(lockText));
     } catch {
-      add("lock", "plugins.lock.json", "drift", "is not a valid plugins-lock/1 file");
+      add("lock", "plugins.lock.json", "is not a valid plugins-lock/1 file");
     }
     for (const pin of lock === null ? [] : plugins) {
       const entry = lock?.plugins.find((p) => p.id === pin.id);
       if (entry === undefined) {
-        add("lock", pin.id, "drift", `${pin.name} is not in the lock`);
+        add("lock", pin.id, `${pin.name} is not in the lock`);
       } else if (entry.version !== pin.version) {
-        add(
-          "lock",
-          pin.id,
-          "drift",
-          `the lock records ${entry.version} but ${pin.version} is pinned`,
-        );
+        add("lock", pin.id, `the lock records ${entry.version} but ${pin.version} is pinned`);
       } else if (JSON.stringify(sorted(entry.files)) !== JSON.stringify(sorted(pin.files))) {
-        add("lock", pin.id, "drift", `the lock's hashes differ from the pin for ${pin.version}`);
+        add("lock", pin.id, `the lock's hashes differ from the pin for ${pin.version}`);
       }
     }
   }
@@ -72,12 +60,11 @@ export async function status(options: StatusOptions): Promise<StatusItem[]> {
       const path = `.obsidian/plugins/${pin.id}/${file}`;
       const bytes = existsSync(join(vault, path)) ? readFileSync(join(vault, path)) : null;
       if (bytes === null) {
-        add("plugin", `${pin.id}/${file}`, "drift", `missing: ${path}`);
+        add("plugin", `${pin.id}/${file}`, `missing: ${path}`);
       } else if (sha256Of(bytes) !== expected) {
         add(
           "plugin",
           `${pin.id}/${file}`,
-          "drift",
           `SHA-256 is ${sha256Of(bytes)}, ${pin.version} is pinned at ${expected}`,
         );
       }
@@ -86,7 +73,7 @@ export async function status(options: StatusOptions): Promise<StatusItem[]> {
 
   // The settings Roots needs.
   const setting = (name: string, ok: boolean, message: string): void => {
-    if (!ok) add("setting", name, "drift", message);
+    if (!ok) add("setting", name, message);
   };
   const templater = readJson(vault, ".obsidian/plugins/templater-obsidian/data.json");
   const templaterSettings = isRecord(templater) ? templater : {};
@@ -107,11 +94,6 @@ export async function status(options: StatusOptions): Promise<StatusItem[]> {
     "core Daily notes plugin",
     core !== undefined && !coreOn("daily-notes"),
     "the core Daily notes plugin should be off",
-  );
-  setting(
-    "core File recovery plugin",
-    coreOn("file-recovery"),
-    "the core File recovery plugin should be on",
   );
   const appearance = readJson(vault, ".obsidian/appearance.json");
   const snippets = isRecord(appearance) ? appearance.enabledCssSnippets : undefined;
@@ -138,40 +120,26 @@ export async function status(options: StatusOptions): Promise<StatusItem[]> {
     `Obsidian is not set to load ${missing.join(", ")}`,
   );
 
-  // Templates and the other files Roots owns the defaults of.
-  const checkDefault = (
-    kind: "template" | "file",
-    name: string,
-    path: string,
-    shipped: string,
-  ): void => {
-    const current = text(path);
-    if (current === null) add(kind, name, "drift", `missing: ${path}`);
-    else if (current !== shipped) {
-      add(kind, name, "modified", `differs from the shipped default (${path})`);
-    }
+  // Files install writes once. An edited one is Pranshul's own, so only a missing one is drift.
+  const checkExists = (kind: "template" | "file", name: string, path: string): void => {
+    if (text(path) === null) add(kind, name, `missing: ${path}`);
   };
   for (const name of templateNames) {
-    checkDefault(
-      "template",
-      name,
-      `${rootsSettings.templatesFolder}/${name}.md`,
-      shippedTemplate(name),
-    );
+    checkExists("template", name, `${rootsSettings.templatesFolder}/${name}.md`);
   }
-  checkDefault("file", "questions.md", "1-Roots/_roots/questions.md", shippedQuestions());
-  checkDefault("file", "roots.css", "1-Roots/_roots/roots.css", shippedCss());
+  checkExists("file", "questions.md", "1-Roots/_roots/questions.md");
+  checkExists("file", "roots.css", "1-Roots/_roots/roots.css");
   const roots = text("1-Roots/_roots/roots.css");
   if (roots !== null && text(".obsidian/snippets/roots.css") !== roots) {
     add(
       "file",
       "roots.css snippet copy",
-      "drift",
+
       ".obsidian/snippets/roots.css differs from _roots/roots.css: run discretion roots install",
     );
   }
   if (text("1-Roots/Roots.md") === null) {
-    add("file", "Roots.md", "drift", "missing: 1-Roots/Roots.md");
+    add("file", "Roots.md", "missing: 1-Roots/Roots.md");
   }
 
   return items.sort(

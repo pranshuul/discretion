@@ -3,8 +3,8 @@ import { readFileSync } from "node:fs";
 export const noteKinds = ["daily", "weekly", "monthly", "quarterly", "yearly", "home"] as const;
 export type NoteKind = (typeof noteKinds)[number];
 
-/** Every file in `_roots/templates/`: the six note templates and the two Templater launchers. */
-export const templateNames = [...noteKinds, "today", "repair"] as const;
+/** Every file in `_roots/templates/`: one template per note kind. */
+export const templateNames = noteKinds;
 export type TemplateName = (typeof templateNames)[number];
 
 /** The names `{{query:<name>}}` accepts. */

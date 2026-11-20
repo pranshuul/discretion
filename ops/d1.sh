@@ -70,8 +70,6 @@ if printf '%s\n' "$plan" | grep -q '^would: '; then
   else
     node "$cli" roots install --vault "$vault"
   fi
-else
-  printf '%s\n' "$plan" | grep '^note: ' || true
 fi
 
 [ "$changed" = 1 ] || echo "nothing to do"
