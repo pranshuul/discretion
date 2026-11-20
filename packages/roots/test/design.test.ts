@@ -58,6 +58,8 @@ describe("Roots DESIGN.md", () => {
       "Colours",
       "One renderer",
       "Templates",
+      "Customizing Roots",
+      "Repairing a note",
       "Marker rules",
       "Privacy spans",
       "Question list",
@@ -252,9 +254,6 @@ describe("Roots DESIGN.md: templates, habits and delays", () => {
     const d = design();
     const paths = section(d, "Notes and paths");
     expect(paths).toContain("templates/{daily,weekly,monthly,quarterly,yearly,home}.md");
-    expect(paths).not.toContain("today.md");
-    expect(paths).not.toContain("repair.md");
-    expect(paths).not.toContain("one line each");
     const custom = section(d, "Templates");
     for (const p of [
       "{{title}}",
@@ -293,31 +292,63 @@ describe("Roots DESIGN.md: templates, habits and delays", () => {
     expect(custom).toMatch(/never re-rendered/);
   });
 
-  it("describes defaults and status, and defines no commands beyond install and status", () => {
-    const d = design();
-    const templates = section(d, "Templates");
+  it("describes defaults, status and the template commands", () => {
+    const templates = section(design(), "Templates");
     expect(templates).toMatch(/never overwrites an edited/);
     expect(templates).toContain("discretion roots status");
-    for (const gone of [
-      "template diff",
-      "template reset",
-      "roots history",
-      "roots restore",
-      "roots repair",
-      "File recovery",
-      "hotkey",
-      "Ctrl+Alt",
-      "Cmd+Option",
-      "repair.md",
-      "today.md",
-      "Repairing a note",
-      "Customizing Roots",
+    expect(templates).toContain("discretion roots template diff");
+    expect(templates).toContain("discretion roots template reset");
+    expect(templates).toContain("discretion roots template check");
+    expect(templates).toContain("_roots/templates/AGENTS.md");
+  });
+
+  it("keeps launchers apart from templates, one line each, in _roots/launchers", () => {
+    const d = design();
+    const paths = section(d, "Notes and paths");
+    expect(paths).toContain(
+      "launchers/{daily,weekly,monthly,quarterly,yearly,home,today,repair}.md",
+    );
+    expect(paths).toContain("<% await tp.user.roots(tp) %>");
+    expect(paths).toContain("roots.js");
+    const plugins = section(d, "Plugins");
+    expect(plugins).toContain("1-Roots/_roots/launchers");
+    expect(plugins).toContain("File recovery");
+    expect(plugins).toContain("Ctrl+Alt+T");
+    expect(plugins).toContain("Ctrl+Alt+R");
+    expect(plugins).toContain("Cmd+Option");
+    expect(plugins).toContain("folder templates");
+  });
+
+  it("has Customizing Roots and Repairing a note sections that name the commands exactly", () => {
+    const d = design();
+    const customizing = section(d, "Customizing Roots");
+    for (const text of [
+      "_roots/templates/AGENTS.md",
+      "discretion roots template check",
+      "discretion roots template diff",
+      "discretion roots template reset",
+      "launchers",
+      "never edited",
     ]) {
-      expect(d.toLowerCase(), gone).not.toContain(gone.toLowerCase());
+      expect(customizing, text).toContain(text);
+    }
+    const repairing = section(d, "Repairing a note");
+    for (const text of [
+      "discretion roots repair",
+      "--dry-run",
+      "Ctrl+Alt+R",
+      "Cmd+Option+R",
+      "## Recovered",
+      "launchers/repair.md",
+      "Templater: Insert 1-Roots/_roots/launchers/repair.md",
+      "Ctrl+Alt+T",
+      "launchers/today.md",
+    ]) {
+      expect(repairing, text).toContain(text);
     }
   });
 
-  it("lists the settings install writes and no others", () => {
+  it("lists the settings install writes", () => {
     const plugins = section(design(), "Plugins");
     expect(plugins).toContain("community-plugins.json");
     expect(plugins).toContain("Daily notes plugin off");

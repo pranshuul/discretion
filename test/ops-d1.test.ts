@@ -183,6 +183,20 @@ describe("ops/d1.sh", () => {
     ]);
   });
 
+  it("passes on the notes install prints, such as a hotkey that was taken, even with nothing to do", () => {
+    const vault = fresh();
+    const dir = join(vault, "..");
+    mkdirSync(dir, { recursive: true });
+    const noted = join(dir, "noted.mjs");
+    writeFileSync(
+      noted,
+      "console.log('nothing to do');\nconsole.log('note: Ctrl+Alt+R is already bound to editor:mine');\n",
+    );
+    const { status, out } = runWith(vault, noted);
+    expect(status).toBe(0);
+    expect(out).toContain("note: Ctrl+Alt+R is already bound to editor:mine");
+  });
+
   it("fails when the Roots install fails", () => {
     const vault = fresh();
     const dir = join(vault, "..");

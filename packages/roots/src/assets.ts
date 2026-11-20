@@ -87,3 +87,18 @@ export function queryBlock(name: QueryName): string {
       return block(home("30 days"), snippet("rating-chart"), trend());
   }
 }
+
+/** The text of every query snippet by name. */
+export function shippedSnippets(): Record<string, string> {
+  throw new Error("red");
+}
+
+/** The shipped `_roots/scripts/roots.js`. */
+export function shippedBundle(): string {
+  throw new Error("red");
+}
+
+/** The shipped `_roots/templates/AGENTS.md`. */
+export function shippedAgents(): string {
+  throw new Error("red");
+}

@@ -106,6 +106,51 @@ describe("roots status", () => {
     expect(await check()).toEqual([]);
   });
 
+  it("flags a launcher that was edited or removed, and a bundle that is stale or missing", async () => {
+    await installed();
+    put("1-Roots/_roots/launchers/daily.md", "mine\n");
+    rmSync(join(vault, "1-Roots/_roots/launchers/repair.md"));
+    put("1-Roots/_roots/scripts/roots.js", "old");
+    const items = await check();
+    expect(find(items, "file", "launchers/daily.md")?.message).toContain("differs");
+    expect(find(items, "file", "launchers/repair.md")?.message).toContain("missing");
+    expect(find(items, "file", "roots.js")?.message).toContain("differs");
+    rmSync(join(vault, "1-Roots/_roots/scripts/roots.js"));
+    expect(find(await check(), "file", "roots.js")?.message).toContain("missing");
+  });
+
+  it("flags Templater's folder templates, template folder and hotkey list when they drift", async () => {
+    await installed();
+    put(
+      ".obsidian/plugins/templater-obsidian/data.json",
+      JSON.stringify({
+        templates_folder: "1-Roots/_roots/templates",
+        user_scripts_folder: "1-Roots/_roots/scripts",
+        enable_folder_templates: false,
+        folder_templates: [],
+        enabled_templates_hotkeys: [],
+      }),
+    );
+    const names = (await check()).filter((i) => i.kind === "setting").map((i) => i.name);
+    expect(names).toEqual([
+      "templater folder templates",
+      "templater template folder",
+      "templater template hotkeys",
+    ]);
+  });
+
+  it("flags the core File recovery plugin when it is off", async () => {
+    await installed();
+    put(".obsidian/core-plugins.json", `{"daily-notes":false,"file-recovery":false}`);
+    expect(find(await check(), "setting", "core File recovery plugin")).toBeDefined();
+  });
+
+  it("does not flag a hotkey that is bound elsewhere", async () => {
+    await installed();
+    put(".obsidian/hotkeys.json", "{}");
+    expect(await check()).toEqual([]);
+  });
+
   it("lists a missing template, questions.md or Roots.md", async () => {
     await installed();
     rmSync(join(vault, "1-Roots/_roots/templates/weekly.md"));
