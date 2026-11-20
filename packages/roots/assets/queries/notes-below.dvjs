@@ -1,0 +1,12 @@
+const sub = cur.kind === "quarterly" ? "Monthly" : "Quarterly";
+const notes = dv
+  .pages(`"1-Roots/${sub}"`)
+  .where((p) => p.from && dv.date(p.from) >= from && dv.date(p.to) <= to)
+  .sort((p) => p.from, "asc")
+  .array();
+for (const p of notes) {
+  const text = await dv.io.load(p.file.path);
+  const m = /<!-- discretion:summary:start -->([\s\S]*?)<!-- discretion:summary:end -->/.exec(text);
+  dv.header(4, p.file.link);
+  dv.paragraph(m && m[1].trim() ? m[1].trim() : "No summary yet.");
+}

@@ -1,0 +1,11 @@
+const day = `1-Roots/Daily/${today.toFormat("yyyy/MM/yyyy-MM-dd")}`;
+const week = `1-Roots/Weekly/${today.toFormat("kkkk")}/${today.toFormat("kkkk-'W'WW")}`;
+dv.paragraph(`[[${day}|Today's note]] · [[${week}|This week]]`);
+const p = days[0];
+if (!p) {
+  dv.paragraph("Today's note has not been created yet.");
+} else {
+  dv.paragraph(`${p.alias || "No alias yet"} · rating ${p.rating ?? "–"}/10`);
+  const habits = Object.entries(p.habits ?? {}).sort(([a], [b]) => (a < b ? -1 : 1));
+  if (habits.length) dv.table(["Habit", "State"], habits);
+}

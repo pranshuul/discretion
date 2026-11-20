@@ -1,6 +1,4 @@
-function red(): never {
-  throw new Error("red");
-}
+import { queryNames, queryBlock, type QueryName } from "./assets.js";
 
 /** What the renderer supplies to a template. */
 export interface TemplateValues {
@@ -17,7 +15,30 @@ export interface Filled {
   unknown: string[];
 }
 
-/** Fills the placeholders of a template in one pass. */
+const fixed = ["title", "links", "date", "question", "frontmatter"] as const;
+
+/**
+ * Fills the placeholders of a template in one pass: `{{title}}`, `{{links}}`, `{{date}}`,
+ * `{{question}}`, `{{frontmatter}}` and `{{query:<name>}}`. Everything else is copied as
+ * written. A placeholder that is not known, or that has no value, stays in the text as
+ * visible `{{name}}` and is reported in `unknown`.
+ */
 export function fillTemplate(template: string, values: TemplateValues): Filled {
-  return red() && { text: template + String(values.title), unknown: [] };
+  const unknown: string[] = [];
+  const text = template.replace(/\{\{([^{}\n]+)\}\}/g, (whole, name: string) => {
+    let filled: string | undefined;
+    if (name.startsWith("query:")) {
+      const query = name.slice("query:".length);
+      if ((queryNames as readonly string[]).includes(query))
+        filled = queryBlock(query as QueryName);
+    } else if ((fixed as readonly string[]).includes(name)) {
+      filled = values[name as (typeof fixed)[number]];
+    }
+    if (filled === undefined) {
+      if (!unknown.includes(name)) unknown.push(name);
+      return whole;
+    }
+    return filled;
+  });
+  return { text, unknown };
 }

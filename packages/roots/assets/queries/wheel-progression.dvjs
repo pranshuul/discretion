@@ -1,0 +1,44 @@
+const areas = [
+  "health",
+  "career",
+  "relationships",
+  "finance",
+  "growth",
+  "recreation",
+  "social",
+  "spirituality",
+];
+const periods = [];
+if (cur.kind === "monthly") {
+  for (
+    let thursday = from.plus({ days: (11 - from.weekday) % 7 });
+    thursday <= to;
+    thursday = thursday.plus({ days: 7 })
+  )
+    periods.push({ label: thursday.toFormat("'W'WW"), start: thursday, end: thursday });
+} else {
+  const months = cur.kind === "quarterly" ? 1 : 3;
+  for (let start = from; start <= to; start = start.plus({ months }))
+    periods.push({
+      label: cur.kind === "quarterly" ? start.toFormat("LLL") : start.toFormat("'Q'q"),
+      start,
+      end: start.plus({ months }).minus({ days: 1 }),
+    });
+}
+const weeks = dv
+  .pages('"1-Roots/Weekly"')
+  .where((p) => p.from)
+  .array()
+  .map((p) => ({ wheel: p.wheel ?? {}, thursday: dv.date(p.from).plus({ days: 3 }) }));
+const cell = (period, area) => {
+  const values = weeks
+    .filter((w) => w.thursday >= period.start && w.thursday <= period.end)
+    .map((w) => w.wheel[area])
+    .filter((v) => typeof v === "number");
+  if (!values.length) return "";
+  return Math.round((10 * values.reduce((s, v) => s + v, 0)) / values.length) / 10;
+};
+dv.table(
+  ["Area", ...periods.map((x) => x.label)],
+  areas.map((a) => [a, ...periods.map((x) => cell(x, a))]),
+);

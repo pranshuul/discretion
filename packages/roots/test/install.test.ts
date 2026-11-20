@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DiscretionError } from "@discretion/core";
+import { PluginsLock } from "@discretion/model";
 import {
   noteKinds,
   shippedCss,
@@ -149,6 +150,13 @@ describe("roots install", () => {
     });
     expect(text.endsWith("}\n")).toBe(true);
     expect(text).toBe(`${JSON.stringify(JSON.parse(text), null, 2)}\n`);
+  });
+
+  it("writes a lock that is valid plugins-lock/1", async () => {
+    const vault = vaultDir();
+    await run(vault);
+    const lock = PluginsLock.parse(JSON.parse(read(vault, ".discretion/plugins.lock.json")));
+    expect(lock.plugins.map((p) => p.version)).toEqual(["0.5.68", "1.5.1", "2.27.0"]);
   });
 
   it("refuses on a hash mismatch with D2010 and writes nothing", async () => {
@@ -314,13 +322,14 @@ describe("roots install", () => {
   it("keeps a hotkey Pranshul rebound and does not nag about it", async () => {
     const vault = vaultDir();
     await run(vault);
-    put(
-      vault,
-      ".obsidian/hotkeys.json",
-      `{"templater-obsidian:1-Roots/_roots/templates/repair.md":[{"modifiers":["Mod"],"key":"J"}]}`,
-    );
+    const keys = json(vault, ".obsidian/hotkeys.json");
+    keys["templater-obsidian:1-Roots/_roots/templates/repair.md"] = [
+      { modifiers: ["Mod"], key: "J" },
+    ];
+    put(vault, ".obsidian/hotkeys.json", JSON.stringify(keys));
     const again = await run(vault);
     expect(again).toEqual({ changes: [], notices: [] });
+    expect(json(vault, ".obsidian/hotkeys.json")).toEqual(keys);
   });
 
   it("re-downloads a plugin file that no longer matches its pin, and re-locks", async () => {

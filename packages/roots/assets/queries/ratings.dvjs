@@ -1,0 +1,18 @@
+const mode = "bars";
+const rated = days.filter((p) => typeof p.rating === "number");
+const average = rated.length ? rated.reduce((s, p) => s + p.rating, 0) / rated.length : null;
+dv.paragraph(
+  average === null
+    ? "No ratings yet."
+    : `Average rating: **${average.toFixed(1)}** over ${rated.length} days`,
+);
+dv.el(
+  "div",
+  ratingChart(
+    days.map((p) => ({
+      label: p.date.toFormat("ccc d LLL"),
+      rating: typeof p.rating === "number" ? p.rating : null,
+    })),
+    mode,
+  ),
+);

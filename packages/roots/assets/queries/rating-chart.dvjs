@@ -1,0 +1,29 @@
+const ratingChart = (points, mode) => {
+  const H = 100;
+  const pad = 5;
+  const y = (r) => pad + ((10 - r) * (H - 2 * pad)) / 9;
+  const title = (p) => `<title>${p.label}: ${p.rating ?? "–"}</title>`;
+  if (mode === "bars") {
+    const W = 28;
+    const bars = points.map((p, i) =>
+      p.rating === null
+        ? `<rect x="${i * W + 4}" y="${H - 4}" width="${W - 8}" height="4" class="roots-pending">${title(p)}</rect>`
+        : `<rect x="${i * W + 4}" y="${y(p.rating)}" width="${W - 8}" height="${H - y(p.rating)}" class="roots-bar">${title(p)}</rect>`,
+    );
+    return `<svg class="roots-chart" viewBox="0 0 ${Math.max(points.length, 1) * W} ${H}" width="100%">${bars.join("")}</svg>`;
+  }
+  const width = 360;
+  const x = (i) =>
+    points.length > 1 ? pad + (i * (width - 2 * pad)) / (points.length - 1) : width / 2;
+  const rated = points.flatMap((p, i) =>
+    p.rating === null ? [] : [{ p, x: x(i).toFixed(1), y: y(p.rating).toFixed(1) }],
+  );
+  const line =
+    rated.length > 1
+      ? `<polyline points="${rated.map((r) => `${r.x},${r.y}`).join(" ")}" class="roots-line"/>`
+      : "";
+  const dots = rated.map(
+    (r) => `<circle cx="${r.x}" cy="${r.y}" r="3" class="roots-dot">${title(r.p)}</circle>`,
+  );
+  return `<svg class="roots-chart" viewBox="0 0 ${width} ${H}" width="100%">${line}${dots.join("")}</svg>`;
+};

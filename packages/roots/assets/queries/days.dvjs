@@ -1,0 +1,4 @@
+dv.table(
+  ["Day", "Alias", "Rating"],
+  days.map((p) => [p.file.link, p.alias ?? "", p.rating ?? ""]),
+);

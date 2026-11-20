@@ -1,0 +1,14 @@
+const ids = [...new Set(days.flatMap((p) => Object.keys(p.habits ?? {})))].sort();
+const openLast = days.length > 0 && +days[days.length - 1].date === +today;
+if (!ids.length) dv.paragraph("No habits stamped yet.");
+else
+  dv.table(
+    ["Habit", "Streak"],
+    ids.map((id) => [
+      id,
+      streak(
+        days.map((p) => (p.habits ?? {})[id]),
+        openLast,
+      ),
+    ]),
+  );

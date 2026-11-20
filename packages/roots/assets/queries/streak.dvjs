@@ -1,0 +1,10 @@
+const streak = (states, openLast) => {
+  let n = 0;
+  for (let i = states.length - 1; i >= 0; i--) {
+    const s = states[i];
+    if (s === "done" || s === "delayed") n++;
+    else if (s === undefined || (s === "pending" && openLast && i === states.length - 1)) continue;
+    else break;
+  }
+  return n;
+};

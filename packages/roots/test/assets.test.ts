@@ -135,7 +135,8 @@ describe("the default templates", () => {
       expect(text.split(`<!-- discretion:${name}:start -->`)).toHaveLength(2);
       expect(text.split(`<!-- discretion:${name}:end -->`)).toHaveLength(2);
     }
-    expect(text.split("<!-- roots:quick-notes:end -->")).toHaveLength(2);
+    // The buttons' code names the marker too, so count the marker on a line of its own.
+    expect(text.split("\n").filter((l) => l === "<!-- roots:quick-notes:end -->")).toHaveLength(1);
     expect(text).not.toContain("discretion:summary");
     expect(text).toContain("INPUT[text(placeholder(Name this day in a few words)):alias]");
     expect(text).toContain(
@@ -187,7 +188,9 @@ describe("the default templates", () => {
     const sliders = fenced(design(), "Wheel of Life", "", "markdown");
     expect(shippedTemplate("weekly")).toContain(sliders);
     for (const kind of noteKinds) {
-      if (kind !== "weekly") expect(shippedTemplate(kind), kind).not.toContain("INPUT[slider");
+      if (kind !== "weekly" && kind !== "daily") {
+        expect(shippedTemplate(kind), kind).not.toContain("INPUT[slider");
+      }
     }
     expect(shippedTemplate("daily")).toContain("INPUT[slider"); // the rating slider
     expect(shippedTemplate("daily")).not.toContain("wheel.");

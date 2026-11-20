@@ -1,0 +1,19 @@
+const kinds = [
+  ["Progress", "progress"],
+  ["Highlights", "highlight"],
+  ["Ideas", "idea"],
+];
+for (const [title, tag] of kinds) {
+  dv.header(4, title);
+  const out = [];
+  for (const p of days) {
+    const text = await dv.io.load(p.file.path);
+    const re = new RegExp(`^\\s*- #${tag}\\b\\s*(.*)$`);
+    for (const line of text.split("\n")) {
+      const m = re.exec(line);
+      if (m && m[1].trim())
+        out.push(`${m[1].replace(/\s+#captured.*$/, "").trim()} — ${p.file.link}`);
+    }
+  }
+  dv.list(out.length ? out : ["Nothing logged."]);
+}

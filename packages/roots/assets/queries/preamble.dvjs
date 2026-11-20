@@ -1,0 +1,9 @@
+const cur = dv.current();
+const from = dv.date(cur.from);
+const to = dv.date(cur.to);
+const today = dv.date("today");
+const days = dv
+  .pages('"1-Roots/Daily"')
+  .where((p) => p.date && p.date >= from && p.date <= to)
+  .sort((p) => p.date, "asc")
+  .array();

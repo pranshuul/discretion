@@ -1,0 +1,14 @@
+const today = dv.date("today");
+const range = "week";
+const from = {
+  today: today,
+  week: today.minus({ days: today.weekday - 1 }),
+  "30 days": today.minus({ days: 29 }),
+  all: null,
+}[range];
+const to = range === "week" ? from.plus({ days: 6 }) : today;
+const days = dv
+  .pages('"1-Roots/Daily"')
+  .where((p) => p.date && (from === null || p.date >= from) && p.date <= to)
+  .sort((p) => p.date, "asc")
+  .array();

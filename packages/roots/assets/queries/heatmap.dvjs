@@ -1,0 +1,67 @@
+const clock = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
+const dueAt = {};
+let section = null;
+for (const raw of (await dv.io.load("3-Mycelium/config/habits.toml")).split("\n")) {
+  const line = raw.trim();
+  const head = /^\[habits\.([^\]]+)\]$/.exec(line);
+  if (head) section = head[1];
+  else if (line.startsWith("[")) section = null;
+  const set = section ? /^(due|window)\s*=\s*(.*)$/.exec(line) : null;
+  const times = set ? set[2].match(/\d\d:\d\d/g) : null;
+  if (times) dueAt[section] = clock(set[1] === "due" ? times[0] : times[times.length - 1]);
+}
+const lateBy = (id, p) => {
+  const t = (p.habitTimes ?? {})[id];
+  return typeof t === "string" && /^\d\d:\d\d$/.test(t) && dueAt[id] !== undefined
+    ? clock(t) - dueAt[id]
+    : null;
+};
+const span = (m) => (m < 60 ? `${m} min` : `${Math.round(m / 60)} h`);
+const median = (xs) => {
+  const sorted = [...xs].sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+};
+const escape = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+const hover = (id, p, s) => {
+  if (s === "delayed") {
+    const t = (p.habitTimes ?? {})[id];
+    const late = lateBy(id, p);
+    if (!t) return "delayed";
+    return late === null ? `done ${t}, late` : `done ${t}, ${span(Math.max(late, 0))} late`;
+  }
+  if (s === "skipped") {
+    const reason = (p.skipReasons ?? {})[id];
+    if (reason) return `skipped — ${reason}`;
+  }
+  return s ?? "not due";
+};
+const ids = [...new Set(days.flatMap((p) => Object.keys(p.habits ?? {})))].sort();
+for (const id of ids) {
+  const stamped = days.filter((p) => (p.habits ?? {})[id]);
+  const done = stamped.filter((p) => p.habits[id] === "done").length;
+  const late = stamped.filter((p) => p.habits[id] === "delayed");
+  const pct = (n) => (stamped.length ? Math.round((100 * n) / stamped.length) : 0);
+  const delays = late.map((p) => lateBy(id, p)).filter((m) => m !== null);
+  let heading = `${id} — ${pct(done + late.length)}%`;
+  if (late.length) heading += ` (${pct(done)}% on time)`;
+  if (delays.length) heading += `, median delay ${span(Math.round(median(delays)))}`;
+  const byDate = new Map(days.map((p) => [p.date.toFormat("yyyy-MM-dd"), p]));
+  const first = from.minus({ days: from.weekday - 1 });
+  const cells = [];
+  for (let d = first; d <= to; d = d.plus({ days: 1 })) {
+    const col = Math.floor(d.diff(first, "days").days / 7);
+    const p = d >= from ? byDate.get(d.toFormat("yyyy-MM-dd")) : undefined;
+    const s = p ? (p.habits ?? {})[id] : undefined;
+    const state = s ?? "future";
+    cells.push(
+      `<rect x="${col * 14}" y="${(d.weekday - 1) * 14}" width="12" height="12" rx="2" class="roots-${state}"><title>${escape(`${d.toFormat("d LLL")}: ${hover(id, p, s)}`)}</title></rect>`,
+    );
+  }
+  const weeks = Math.ceil((to.diff(first, "days").days + 1) / 7);
+  dv.header(4, heading);
+  dv.el(
+    "div",
+    `<svg class="roots-chart" viewBox="0 0 ${weeks * 14} 98" width="${Math.min(weeks * 14, 720)}">${cells.join("")}</svg>`,
+  );
+}
