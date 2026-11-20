@@ -1,0 +1,116 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": true,
+  "properties": {
+    "aiAlias": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "aiRating": {
+      "anyOf": [
+        {
+          "maximum": 10,
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "alias": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "date": {
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "type": "string"
+    },
+    "discretion": {
+      "const": 1,
+      "type": "number"
+    },
+    "habitMinutes": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "number"
+      },
+      "type": "object"
+    },
+    "habitSource": {
+      "additionalProperties": {
+        "enum": [
+          "timed",
+          "self-reported"
+        ],
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "habitTimes": {
+      "additionalProperties": {
+        "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "habits": {
+      "additionalProperties": {
+        "enum": [
+          "pending",
+          "done",
+          "delayed",
+          "skipped",
+          "missed"
+        ],
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "private": {
+      "type": "boolean"
+    },
+    "rating": {
+      "anyOf": [
+        {
+          "maximum": 10,
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "roots": {
+      "const": 1,
+      "type": "number"
+    },
+    "skipReasons": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    }
+  },
+  "required": [
+    "roots",
+    "date",
+    "rating",
+    "alias",
+    "aiRating",
+    "aiAlias",
+    "discretion",
+    "habits",
+    "habitTimes",
+    "habitMinutes",
+    "habitSource",
+    "skipReasons"
+  ],
+  "title": "roots/1",
+  "type": "object"
+}

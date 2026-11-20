@@ -6,6 +6,8 @@ import { Action } from "./action.js";
 import { Config } from "./config.js";
 import { Event } from "./event.js";
 import { Log } from "./log.js";
+import { PluginsLock } from "./pluginslock.js";
+import { RootsDaily } from "./roots.js";
 import { Runflow } from "./runflow.js";
 
 /** Every frozen format by its versioned name. */
@@ -15,6 +17,8 @@ export function formats(): Record<string, ZodTypeAny> {
     "config/1": Config,
     "event/1": Event,
     "log/1": Log,
+    "plugins-lock/1": PluginsLock,
+    "roots/1": RootsDaily,
     "runflow/1": Runflow,
   };
 }

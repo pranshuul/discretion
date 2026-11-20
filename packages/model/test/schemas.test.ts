@@ -230,7 +230,15 @@ describe("schema generation and check", () => {
     for (const path of paths) {
       expect(readFileSync(join(dir, path), "utf8")).toBe(renderSchemas()[path]);
     }
-    expect(readdirSync(dir).sort()).toEqual(["action", "config", "event", "log", "runflow"]);
+    expect(readdirSync(dir).sort()).toEqual([
+      "action",
+      "config",
+      "event",
+      "log",
+      "plugins-lock",
+      "roots",
+      "runflow",
+    ]);
   });
 
   it("passes the check on freshly written schemas", () => {
